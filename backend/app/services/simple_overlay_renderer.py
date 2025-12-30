@@ -287,7 +287,7 @@ class SimpleOverlayRenderer:
 
             # Colors from new HTML design
             border_color = (122, 32, 13, 255)  # #7a200d
-            header_color = (163, 42, 13, 255)  # #a32a0d
+            header_color = (122, 32, 13, 255)  # #7a200d (same as border)
             header_bottom_border = (92, 26, 26, 255)  # #5c1a1a
 
             # Load fonts
@@ -307,9 +307,9 @@ class SimpleOverlayRenderer:
             # Bottom border
             draw.rectangle([0, height-border_width, width, height], fill=border_color)
 
-            # 2. Draw red header block at top (rounded top corners)
+            # 2. Draw red header block at top (starts from very top)
             header_height = 300
-            header_y = 20
+            header_y = 0
 
             # Draw rounded rectangle for header
             draw.rectangle([border_width, header_y, width-border_width, header_y+header_height],
@@ -362,19 +362,21 @@ class SimpleOverlayRenderer:
                 loc_y = height - 100
                 loc_x = 40
 
-                # Rounded location box
+                # Rounded location box (left side only)
                 loc_width = 300
                 loc_height = 62
 
-                # Draw gradient background (approximation)
+                # Draw background with rounded left side, straight right side
                 loc_bg = (163, 42, 13, 255)  # #a32a0d
                 draw.ellipse([loc_x, loc_y, loc_x+60, loc_y+loc_height], fill=loc_bg)
-                draw.ellipse([loc_x+loc_width-60, loc_y, loc_x+loc_width, loc_y+loc_height], fill=loc_bg)
-                draw.rectangle([loc_x+30, loc_y, loc_x+loc_width-30, loc_y+loc_height], fill=loc_bg)
+                draw.rectangle([loc_x+30, loc_y, loc_x+loc_width, loc_y+loc_height], fill=loc_bg)
 
-                # White border
+                # White border on left rounded side
                 draw.ellipse([loc_x-1, loc_y-1, loc_x+61, loc_y+loc_height+1], outline=(255, 255, 255, 255), width=2)
-                draw.ellipse([loc_x+loc_width-61, loc_y-1, loc_x+loc_width+1, loc_y+loc_height+1], outline=(255, 255, 255, 255), width=2)
+                # White border on top, right, bottom edges
+                draw.line([loc_x+30, loc_y, loc_x+loc_width, loc_y], fill=(255, 255, 255, 255), width=2)
+                draw.line([loc_x+loc_width, loc_y, loc_x+loc_width, loc_y+loc_height], fill=(255, 255, 255, 255), width=2)
+                draw.line([loc_x+30, loc_y+loc_height, loc_x+loc_width, loc_y+loc_height], fill=(255, 255, 255, 255), width=2)
 
                 # Location text
                 loc_text = f"📍 {location}"
