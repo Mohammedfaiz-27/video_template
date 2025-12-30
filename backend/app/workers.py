@@ -173,11 +173,13 @@ async def render_video_task(video_id: str) -> bool:
                         (video.get("location", {}).get("text") if video.get("location") else None)
 
         show_location = video.get("show_location", True)
+        template_id = video.get("template_id", "template1")
 
         print(f"📝 Rendering with:")
         print(f"   Headline: {final_headline}")
         if show_location and final_location:
             print(f"   Location: {final_location}")
+        print(f"   Template: {template_id}")
 
         # Process video
         processor = VideoProcessor()
@@ -186,7 +188,8 @@ async def render_video_task(video_id: str) -> bool:
             output_path,
             final_headline,
             final_location,
-            show_location
+            show_location,
+            template_id
         )
 
         if not success:

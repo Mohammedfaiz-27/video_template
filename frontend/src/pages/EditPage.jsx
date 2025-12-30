@@ -11,6 +11,7 @@ function EditPage() {
   const [headline, setHeadline] = useState('');
   const [location, setLocation] = useState('');
   const [showLocation, setShowLocation] = useState(true);
+  const [selectedTemplate, setSelectedTemplate] = useState('template1');
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,7 +54,8 @@ function EditPage() {
       await videoAPI.triggerRender(videoId, {
         headline,
         location,
-        show_location: showLocation
+        show_location: showLocation,
+        template_id: selectedTemplate
       });
 
       // Poll for completion
@@ -193,6 +195,82 @@ function EditPage() {
               </p>
             </div>
           )}
+
+          {/* Template Selector */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Choose Template
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setSelectedTemplate('template1')}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  selectedTemplate === 'template1'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-2xl mb-2">🎨</div>
+                  <div className="text-xs font-medium text-gray-900">Template 1</div>
+                  <div className="text-xs text-gray-500 mt-1">Full Frame Golden</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedTemplate('template2')}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  selectedTemplate === 'template2'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-2xl mb-2">📺</div>
+                  <div className="text-xs font-medium text-gray-900">Template 2</div>
+                  <div className="text-xs text-gray-500 mt-1">Split Video Orange</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedTemplate('template3')}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  selectedTemplate === 'template3'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-2xl mb-2">✨</div>
+                  <div className="text-xs font-medium text-gray-900">Template 3</div>
+                  <div className="text-xs text-gray-500 mt-1">Minimal Modern</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedTemplate('template4')}
+                className={`p-4 rounded-lg border-2 transition-all ${
+                  selectedTemplate === 'template4'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-blue-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-2xl mb-2">🏛️</div>
+                  <div className="text-xs font-medium text-gray-900">Template 4</div>
+                  <div className="text-xs text-gray-500 mt-1">Tiruvarur Updates</div>
+                </div>
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Selected: <span className="font-medium">
+                {selectedTemplate === 'template1' && 'Full Frame Golden - Top bar, date, logo, golden theme'}
+                {selectedTemplate === 'template2' && 'Split Video Orange - News broadcast style, orange theme'}
+                {selectedTemplate === 'template3' && 'Minimal Modern - Clean, simple design'}
+                {selectedTemplate === 'template4' && 'Tiruvarur Updates - Red/maroon gradient, professional news style'}
+              </span>
+            </p>
+          </div>
 
           {/* Headline Editor */}
           <div className="mb-6">

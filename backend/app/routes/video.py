@@ -297,6 +297,7 @@ async def render_video(video_id: str, request: RenderRequest, background_tasks: 
         update_data["user_location"] = request.location
 
     update_data["show_location"] = request.show_location
+    update_data["template_id"] = request.template_id  # Store selected template
 
     await collection.update_one(
         {"_id": video_id},

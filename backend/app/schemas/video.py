@@ -56,6 +56,7 @@ class RenderRequest(BaseModel):
     headline: Optional[str] = Field(None, min_length=5, max_length=100)
     location: Optional[str] = Field(None, min_length=2, max_length=50)
     show_location: bool = True
+    template_id: str = Field("template1", description="Template to use: template1, template2, template3, template4")
 
 
 class RenderResponse(BaseModel):

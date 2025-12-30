@@ -185,10 +185,14 @@ class VideoProcessor:
         output_path: str,
         headline: str,
         location: Optional[str] = None,
-        show_location: bool = True
+        show_location: bool = True,
+        template_id: str = "template1"
     ) -> bool:
         """
-        Add text overlays (headline and location) to video with golden borders and backgrounds.
+        Apply selected template with video, headline, location, and date.
+
+        Uses HTML templates for easy customization.
+        All templates are defined in backend/templates/ as HTML files.
 
         Args:
             input_path: Input video path (should be 9:16)
@@ -196,96 +200,23 @@ class VideoProcessor:
             headline: Headline text to overlay
             location: Optional location text
             show_location: Whether to show location
+            template_id: Template to use (template1, template2, template3, template4)
 
         Returns:
             True if successful, False otherwise
         """
-        try:
-            print(f"✏️  Adding text overlays with golden borders")
-            print(f"   Headline: {headline}")
-            if show_location and location:
-                print(f"   Location: {location}")
+        # Use HTML template system
+        html_template_name = f"{template_id}.html"
 
-            # Get Tamil font path
-            tamil_font_path = str(Path(__file__).parent.parent.parent / 'fonts' / 'TAMIL-UNI004.ttf')
-            # Escape backslashes for FFmpeg (Windows path)
-            tamil_font_escaped = tamil_font_path.replace('\\', '/')
-
-            # Escape headline and location text
-            headline_escaped = VideoProcessor._escape_text(headline)
-            location_escaped = VideoProcessor._escape_text(location) if location else ""
-
-            # Build FFmpeg command
-            stream = ffmpeg.input(input_path)
-
-            # Add border to entire video frame (10px golden border)
-            stream = ffmpeg.filter(stream, 'pad',
-                width='iw+20',
-                height='ih+20',
-                x=10,
-                y=10,
-                color='#fda085'
-            )
-
-            # HEADLINE OVERLAY - Top center with golden background and border
-            # Positioned safely inside video frame with proper margins
-            stream = ffmpeg.filter(stream, 'drawtext', None, **{
-                'text': headline_escaped,
-                'fontfile': tamil_font_escaped,  # Tamil font for proper Tamil support
-                'fontcolor': '#1a2b47',  # Dark blue text (matching HTML template)
-                'fontsize': 42,  # Optimized size for Tamil text
-                'box': 1,
-                'boxcolor': '#f6d365@0.95',  # Golden color with 95% opacity
-                'boxborderw': 35,  # Extra padding to keep text inside box
-                'borderw': 6,  # Thick border for visibility
-                'bordercolor': '#fda085',  # Coral/peach border color
-                'x': '(w-text_w)/2',  # Center horizontally
-                'y': 170,  # Positioned from top
-                'shadowcolor': 'black@0.5',
-                'shadowx': 5,
-                'shadowy': 5
-            })
-
-            # LOCATION OVERLAY - Bottom left with golden background and border
-            if show_location and location:
-                # Use simple location marker that renders properly
-                location_with_marker = f"▸ {location_escaped}"  # Triangle marker instead of emoji
-                stream = ffmpeg.filter(stream, 'drawtext', None, **{
-                    'text': location_with_marker,
-                    'fontfile': tamil_font_escaped,  # Tamil font for consistent styling
-                    'fontcolor': '#1a2b47',  # Dark blue text
-                    'fontsize': 36,  # Font size for location
-                    'box': 1,
-                    'boxcolor': '#f6d365@0.95',  # Golden color with 95% opacity
-                    'boxborderw': 28,  # Extra padding
-                    'borderw': 5,  # Thicker border matching headline
-                    'bordercolor': '#fda085',  # Coral/peach border color
-                    'x': 110,  # Position from left (accounting for video border)
-                    'y': 'h-200',  # Position from bottom
-                    'shadowcolor': 'black@0.4',
-                    'shadowx': 4,
-                    'shadowy': 4
-                })
-
-            # Output with audio copy
-            stream = ffmpeg.output(
-                stream,
-                output_path,
-                vcodec='libx264',
-                acodec='copy',
-                preset='medium',
-                crf=23
-            )
-
-            # Run FFmpeg
-            ffmpeg.run(stream, overwrite_output=True, quiet=False)
-
-            print(f"   ✓ Text overlays with golden borders added")
-            return True
-
-        except Exception as e:
-            print(f"   ❌ Error adding text overlays: {e}")
-            return False
+        print(f"🎨 Using HTML template: {html_template_name}")
+        return VideoProcessor.process_with_html_template(
+            input_path=input_path,
+            output_path=output_path,
+            template_name=html_template_name,
+            headline=headline,
+            location=location,
+            show_location=show_location
+        )
 
     @staticmethod
     def process_video_complete(
@@ -293,7 +224,8 @@ class VideoProcessor:
         output_path: str,
         headline: str,
         location: Optional[str] = None,
-        show_location: bool = True
+        show_location: bool = True,
+        template_id: str = "template1"
     ) -> bool:
         """
         Complete video processing: convert to 9:16 + add text overlays in one pass.
@@ -323,13 +255,14 @@ class VideoProcessor:
             if not success:
                 return False
 
-            # Step 2: Add text overlays
+            # Step 2: Add text overlays with selected template
             success = VideoProcessor.add_text_overlays(
                 temp_path,
                 output_path,
                 headline,
                 location,
-                show_location
+                show_location,
+                template_id
             )
 
             # Clean up temp file
@@ -436,4 +369,142 @@ class VideoProcessor:
             return True
         except Exception as e:
             print(f"❌ Error extracting thumbnail: {e}")
+            return False
+
+    @staticmethod
+    def process_with_html_template(
+        input_path: str,
+        output_path: str,
+        template_name: str,
+        headline: str,
+        location: Optional[str] = None,
+        show_location: bool = True
+    ) -> bool:
+        """
+        Process video using HTML template overlay (with Pillow fallback).
+
+        This method:
+        1. Tries to render HTML template to PNG overlay (requires html2image + Chrome)
+        2. Falls back to Pillow-based overlay if HTML fails
+        3. Converts video to 9:16 format
+        4. Composites overlay on top of video
+
+        Args:
+            input_path: Input video path
+            output_path: Output video path
+            template_name: HTML template filename (e.g., 'template1.html')
+            headline: News headline text
+            location: Location text
+            show_location: Whether to show location
+
+        Returns:
+            True if successful
+        """
+        try:
+            import tempfile
+
+            print(f"🎨 Processing video with template: {template_name}")
+
+            # Step 1: Create overlay PNG
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                overlay_path = tmp.name
+
+            # Try HTML rendering first (requires html2image + Chrome)
+            html_success = False
+            try:
+                from app.services.html_renderer import HTMLRendererSync
+
+                template_data = {
+                    'headline': headline,
+                    'location': location or '',
+                    'show_location': show_location
+                }
+
+                print(f"   📄 Trying HTML rendering...")
+                html_success = HTMLRendererSync.render_template(
+                    template_name=template_name,
+                    output_path=overlay_path,
+                    data=template_data,
+                    width=1080,
+                    height=1920
+                )
+            except Exception as e:
+                print(f"   ⚠️  HTML rendering not available: {e}")
+
+            # Fallback to Pillow if HTML failed
+            if not html_success:
+                print(f"   🎨 Using Pillow fallback renderer...")
+                from app.services.simple_overlay_renderer import SimpleOverlayRenderer
+
+                # Use Pillow renderer for any template
+                success = SimpleOverlayRenderer.create_overlay(
+                    template_name=template_name,
+                    output_path=overlay_path,
+                    headline=headline,
+                    location=location,
+                    show_location=show_location
+                )
+                if not success:
+                    print(f"   ❌ Pillow rendering also failed")
+                    return False
+
+            # Step 2: Convert video to 9:16 and composite with overlay
+            print(f"   🎬 Converting video to 9:16 format...")
+            input_stream = ffmpeg.input(input_path)
+            video = input_stream.video
+
+            # Convert to 9:16 (1080x1920)
+            video = ffmpeg.filter(video, 'scale', width=1080, height=-2)
+            video = ffmpeg.filter(video, 'crop', w=1080, h=1920, x='(in_w-1080)/2', y='(in_h-1920)/2')
+
+            # Load overlay image
+            overlay = ffmpeg.input(overlay_path)
+
+            # Composite overlay on top of video
+            print(f"   🖼️  Compositing HTML overlay on video...")
+            video = ffmpeg.overlay(video, overlay, x=0, y=0)
+
+            # Get original input again for audio
+            input_for_audio = ffmpeg.input(input_path)
+
+            # Output with audio
+            output = ffmpeg.output(
+                video, input_for_audio.audio,
+                output_path,
+                vcodec='libx264',
+                acodec='aac',
+                preset='medium',
+                crf=23,
+                audio_bitrate='192k',
+                shortest=None
+            )
+
+            # Run FFmpeg
+            try:
+                ffmpeg.run(output, overwrite_output=True, quiet=False)
+                print(f"   ✅ Video processed successfully with HTML template")
+            except Exception as e:
+                # If audio fails, try without audio
+                print(f"   ⚠️  Audio processing failed, rendering video only: {e}")
+                output_no_audio = ffmpeg.output(
+                    video,
+                    output_path,
+                    vcodec='libx264',
+                    preset='medium',
+                    crf=23
+                )
+                ffmpeg.run(output_no_audio, overwrite_output=True, quiet=False)
+
+            # Cleanup temporary overlay file
+            try:
+                os.unlink(overlay_path)
+            except:
+                pass
+
+            return True
+
+        except Exception as e:
+            print(f"❌ HTML template processing failed: {e}")
+            import traceback
+            traceback.print_exc()
             return False

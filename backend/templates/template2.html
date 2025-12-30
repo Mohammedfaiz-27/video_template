@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1080px;
+            height: 1920px;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            position: relative;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        }
+
+        /* Video placeholder - This area will show the actual video */
+        .video-placeholder {
+            position: absolute;
+            top: 200px;
+            left: 80px;
+            width: 920px;
+            height: 1100px;
+            background: transparent;
+            z-index: 1;
+            border: 4px solid #ff6b35;
+            border-radius: 15px;
+        }
+
+        /* Top section with orange gradient */
+        .top-section {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+            z-index: 2;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Logo */
+        .logo {
+            position: absolute;
+            top: 30px;
+            left: 80px;
+            color: white;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.5);
+            z-index: 3;
+        }
+
+        /* Live indicator */
+        .live-indicator {
+            position: absolute;
+            top: 50px;
+            right: 80px;
+            background: #ff0000;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 28px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.5);
+            z-index: 3;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Headline section - Below video */
+        .headline-container {
+            position: absolute;
+            bottom: 350px;
+            left: 80px;
+            right: 80px;
+            z-index: 3;
+        }
+
+        .headline {
+            background: rgba(255, 107, 53, 0.95);
+            padding: 40px 50px;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .headline-text {
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            line-height: 1.4;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Bottom news bar */
+        .news-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+            border-top: 4px solid #ff6b35;
+            z-index: 2;
+        }
+
+        /* Location and date in bottom bar */
+        .bottom-info {
+            position: absolute;
+            bottom: 40px;
+            left: 80px;
+            right: 80px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 3;
+        }
+
+        .location {
+            color: #ff6b35;
+            font-size: 36px;
+            font-weight: bold;
+            display: {{show_location}};
+        }
+
+        .location-icon {
+            font-size: 36px;
+            margin-right: 10px;
+        }
+
+        .date {
+            color: white;
+            font-size: 32px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- Video Placeholder - Backend will composite video here -->
+    <div class="video-placeholder"></div>
+
+    <!-- Top Orange Section -->
+    <div class="top-section"></div>
+
+    <!-- Logo -->
+    <div class="logo">NEWS BROADCAST</div>
+
+    <!-- Live Indicator -->
+    <div class="live-indicator">● LIVE</div>
+
+    <!-- Headline -->
+    <div class="headline-container">
+        <div class="headline">
+            <div class="headline-text">{{headline}}</div>
+        </div>
+    </div>
+
+    <!-- Bottom News Bar -->
+    <div class="news-bar"></div>
+
+    <!-- Bottom Info -->
+    <div class="bottom-info">
+        <div class="location">
+            <span class="location-icon">📍</span>
+            <span>{{location}}</span>
+        </div>
+        <div class="date">{{date}}</div>
+    </div>
+</body>
+</html>
