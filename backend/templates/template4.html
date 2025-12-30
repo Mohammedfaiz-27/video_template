@@ -54,26 +54,20 @@
             z-index: 4;
         }
 
-        /* Logo in top right */
+        /* Logo in top right of video area */
         .logo-container {
             position: absolute;
-            top: 60px;
-            right: 80px;
-            background: white;
-            padding: 20px 25px;
-            border-radius: 10px;
-            border: 4px solid #8b2500;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            top: 320px;  /* Below red section */
+            right: 60px;
             z-index: 5;
         }
 
-        .logo-text {
-            text-align: center;
-            font-size: 28px;
-            font-weight: bold;
-            color: #8b2500;
-            line-height: 1.3;
-            text-transform: uppercase;
+        .logo-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;  /* Make it circular */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            border: 3px solid white;
         }
 
         /* Date in top section */
@@ -159,7 +153,10 @@
 
     <!-- Tiruvarur Updates Logo -->
     <div class="logo-container">
-        <div class="logo-text">TIRUVARUR<br>UPDATES</div>
+        <img src="../assets/tiruvarur_logo.png"
+             alt="Tiruvarur Updates"
+             class="logo-img"
+             onerror="this.style.display='none'">
     </div>
 
     <!-- Date -->
@@ -176,7 +173,7 @@
     <div class="location-container">
         <div class="location">
             <span class="location-icon">📍</span>
-            <span class="location-text">Anna nagar</span>
+            <span class="location-text">{{location}}</span>
         </div>
     </div>
 </body>
