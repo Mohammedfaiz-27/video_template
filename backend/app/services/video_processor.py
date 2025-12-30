@@ -107,12 +107,15 @@ class VideoProcessor:
             target_height = 1920
             target_aspect = target_width / target_height  # 0.5625
 
+            # Get input stream
+            input_stream = ffmpeg.input(input_path)
+
             # Choose conversion strategy based on current aspect ratio
             if info['aspect_category'] == "9:16":
                 # Already 9:16, just scale
                 print("   Strategy: Scale (already 9:16)")
-                stream = ffmpeg.input(input_path)
-                stream = ffmpeg.filter(stream, 'scale', target_width, target_height)
+                video = input_stream.video
+                video = ffmpeg.filter(video, 'scale', target_width, target_height)
 
             elif aspect > target_aspect:
                 # Wider than 9:16 (e.g., 16:9, 4:3) - crop sides
@@ -123,12 +126,12 @@ class VideoProcessor:
                 scale_height = target_height
                 scale_width = int(current_width * (scale_height / current_height))
 
-                stream = ffmpeg.input(input_path)
+                video = input_stream.video
                 # Scale to target height
-                stream = ffmpeg.filter(stream, 'scale', scale_width, scale_height)
+                video = ffmpeg.filter(video, 'scale', scale_width, scale_height)
                 # Crop to target width (center crop)
-                stream = ffmpeg.filter(
-                    stream,
+                video = ffmpeg.filter(
+                    video,
                     'crop',
                     target_width,
                     target_height,
@@ -144,12 +147,12 @@ class VideoProcessor:
                 scale_width = target_width
                 scale_height = int(current_height * (scale_width / current_width))
 
-                stream = ffmpeg.input(input_path)
+                video = input_stream.video
                 # Scale to target width
-                stream = ffmpeg.filter(stream, 'scale', scale_width, scale_height)
+                video = ffmpeg.filter(video, 'scale', scale_width, scale_height)
                 # Pad to target height with black bars
-                stream = ffmpeg.filter(
-                    stream,
+                video = ffmpeg.filter(
+                    video,
                     'pad',
                     target_width,
                     target_height,
@@ -158,15 +161,20 @@ class VideoProcessor:
                     'black'
                 )
 
-            # Output with audio copy (no re-encoding audio)
+            # Get audio stream from input
+            audio = input_stream.audio
+
+            # Output with video and audio
+            print("   🔊 Preserving audio in 9:16 conversion...")
             stream = ffmpeg.output(
-                stream,
+                video,
+                audio,
                 output_path,
                 vcodec='libx264',
                 acodec='aac',
                 preset='medium',
                 crf=23,
-                **{'b:a': '128k'}
+                **{'b:a': '192k'}
             )
 
             # Run FFmpeg
@@ -448,52 +456,86 @@ class VideoProcessor:
                     print(f"   ❌ Pillow rendering also failed")
                     return False
 
-            # Step 2: Convert video to 9:16 and composite with overlay
-            print(f"   🎬 Converting video to 9:16 format...")
-            input_stream = ffmpeg.input(input_path)
-            video = input_stream.video
+            # Step 2: Convert video to 9:16 and composite with overlay using direct FFmpeg
+            print(f"   🎬 Converting video to 9:16 format and compositing overlay...")
+            print(f"   🔊 Preserving original audio...")
 
-            # Convert to 9:16 (1080x1920)
-            video = ffmpeg.filter(video, 'scale', width=1080, height=-2)
-            video = ffmpeg.filter(video, 'crop', w=1080, h=1920, x='(in_w-1080)/2', y='(in_h-1920)/2')
+            # Use subprocess to run FFmpeg directly for better audio handling
+            import subprocess
 
-            # Load overlay image
-            overlay = ffmpeg.input(overlay_path)
+            # First, check if input has audio
+            probe_cmd = ['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries',
+                        'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1', input_path]
 
-            # Composite overlay on top of video
-            print(f"   🖼️  Compositing HTML overlay on video...")
-            video = ffmpeg.overlay(video, overlay, x=0, y=0)
-
-            # Get original input again for audio
-            input_for_audio = ffmpeg.input(input_path)
-
-            # Output with audio
-            output = ffmpeg.output(
-                video, input_for_audio.audio,
-                output_path,
-                vcodec='libx264',
-                acodec='aac',
-                preset='medium',
-                crf=23,
-                audio_bitrate='192k',
-                shortest=None
-            )
-
-            # Run FFmpeg
             try:
-                ffmpeg.run(output, overwrite_output=True, quiet=False)
-                print(f"   ✅ Video processed successfully with HTML template")
-            except Exception as e:
-                # If audio fails, try without audio
-                print(f"   ⚠️  Audio processing failed, rendering video only: {e}")
-                output_no_audio = ffmpeg.output(
-                    video,
-                    output_path,
-                    vcodec='libx264',
-                    preset='medium',
-                    crf=23
+                audio_codec = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+                has_audio = bool(audio_codec.stdout.strip())
+                if has_audio:
+                    print(f"   🎵 Input audio codec: {audio_codec.stdout.strip()}")
+                else:
+                    print(f"   ℹ️  Input video has no audio stream")
+            except:
+                has_audio = False
+                print(f"   ℹ️  Could not detect audio stream")
+
+            # Build FFmpeg command with audio copying (not re-encoding)
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', input_path,           # Input video
+                '-i', overlay_path,          # Input overlay
+                '-filter_complex',
+                '[0:v]scale=1080:-2,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2[scaled];'
+                '[scaled][1:v]overlay=0:0[outv]',
+                '-map', '[outv]',            # Map processed video
+                '-map', '0:a?',              # Map audio from input (? means optional)
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23',
+                '-c:a', 'copy',              # COPY audio (don't re-encode)
+                '-y',                        # Overwrite output
+                output_path
+            ]
+
+            print(f"   🔧 FFmpeg command: {' '.join(ffmpeg_cmd)}")
+
+            try:
+                result = subprocess.run(
+                    ffmpeg_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True
                 )
-                ffmpeg.run(output_no_audio, overwrite_output=True, quiet=False)
+                if has_audio:
+                    print(f"   ✅ Video processed successfully WITH original audio")
+                else:
+                    print(f"   ✅ Video processed successfully (no audio in source)")
+            except subprocess.CalledProcessError as e:
+                print(f"   ❌ FFmpeg error:")
+                print(f"   {e.stderr[-500:]}")  # Last 500 chars of error
+
+                # Try with AAC encoding instead of copy
+                if has_audio:
+                    print(f"   🔄 Retrying with AAC audio encoding...")
+                    ffmpeg_cmd[ffmpeg_cmd.index('-c:a') + 1] = 'aac'
+                    ffmpeg_cmd.insert(ffmpeg_cmd.index('-c:a') + 2, '-b:a')
+                    ffmpeg_cmd.insert(ffmpeg_cmd.index('-c:a') + 3, '192k')
+
+                    try:
+                        subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=True)
+                        print(f"   ✅ Video processed with AAC audio")
+                    except:
+                        # Last resort: no audio
+                        print(f"   ⚠️  Rendering without audio...")
+                        ffmpeg_cmd_no_audio = [
+                            'ffmpeg', '-i', input_path, '-i', overlay_path,
+                            '-filter_complex',
+                            '[0:v]scale=1080:-2,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2[scaled];'
+                            '[scaled][1:v]overlay=0:0',
+                            '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+                            '-y', output_path
+                        ]
+                        subprocess.run(ffmpeg_cmd_no_audio, check=True)
+                        print(f"   ⚠️  Video rendered without audio")
 
             # Cleanup temporary overlay file
             try:
