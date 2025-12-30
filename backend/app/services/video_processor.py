@@ -188,7 +188,7 @@ class VideoProcessor:
         show_location: bool = True
     ) -> bool:
         """
-        Add text overlays (headline and location) to video.
+        Add text overlays (headline and location) to video with golden borders and backgrounds.
 
         Args:
             input_path: Input video path (should be 9:16)
@@ -201,90 +201,70 @@ class VideoProcessor:
             True if successful, False otherwise
         """
         try:
-            print(f"✏️  Adding text overlays")
+            print(f"✏️  Adding text overlays with golden borders")
             print(f"   Headline: {headline}")
             if show_location and location:
                 print(f"   Location: {location}")
 
-            # Escape special characters for FFmpeg drawtext
+            # Get Tamil font path
+            tamil_font_path = str(Path(__file__).parent.parent.parent / 'fonts' / 'TAMIL-UNI004.ttf')
+            # Escape backslashes for FFmpeg (Windows path)
+            tamil_font_escaped = tamil_font_path.replace('\\', '/')
+
+            # Escape headline and location text
             headline_escaped = VideoProcessor._escape_text(headline)
             location_escaped = VideoProcessor._escape_text(location) if location else ""
 
-            # Build filter complex
-            filters = []
-
-            # Headline overlay (top center)
-            headline_filter = (
-                f"drawtext="
-                f"fontfile=C\\\\:/Windows/Fonts/arialbd.ttf:"  # Windows Arial Bold
-                f"text='{headline_escaped}':"
-                f"fontcolor=white:"
-                f"fontsize=64:"
-                f"borderw=3:"
-                f"bordercolor=black:"
-                f"x=(w-text_w)/2:"  # Center horizontally
-                f"y=120:"  # 120px from top
-                f"shadowcolor=black@0.8:"
-                f"shadowx=2:"
-                f"shadowy=2"
-            )
-            filters.append(headline_filter)
-
-            # Location overlay (bottom left) with emoji
-            if show_location and location:
-                location_text = f"📍 {location_escaped}"
-                location_filter = (
-                    f"drawtext="
-                    f"fontfile=C\\\\:/Windows/Fonts/arial.ttf:"
-                    f"text='{location_text}':"
-                    f"fontcolor=white:"
-                    f"fontsize=36:"
-                    f"box=1:"
-                    f"boxcolor=black@0.7:"
-                    f"boxborderw=10:"
-                    f"x=50:"  # 50px from left
-                    f"y=h-100:"  # 100px from bottom
-                    f"shadowcolor=black@0.5:"
-                    f"shadowx=1:"
-                    f"shadowy=1"
-                )
-                filters.append(location_filter)
-
-            # Combine filters
-            filter_complex = ",".join(filters)
-
             # Build FFmpeg command
             stream = ffmpeg.input(input_path)
+
+            # Add border to entire video frame (10px golden border)
+            stream = ffmpeg.filter(stream, 'pad',
+                width='iw+20',
+                height='ih+20',
+                x=10,
+                y=10,
+                color='#fda085'
+            )
+
+            # HEADLINE OVERLAY - Top center with golden background and border
+            # Positioned safely inside video frame with proper margins
             stream = ffmpeg.filter(stream, 'drawtext', None, **{
                 'text': headline_escaped,
-                'fontfile': 'C:/Windows/Fonts/arialbd.ttf',
-                'fontcolor': 'white',
-                'fontsize': 64,
-                'borderw': 3,
-                'bordercolor': 'black',
-                'x': '(w-text_w)/2',
-                'y': 120,
-                'shadowcolor': 'black@0.8',
-                'shadowx': 2,
-                'shadowy': 2
+                'fontfile': tamil_font_escaped,  # Tamil font for proper Tamil support
+                'fontcolor': '#1a2b47',  # Dark blue text (matching HTML template)
+                'fontsize': 42,  # Optimized size for Tamil text
+                'box': 1,
+                'boxcolor': '#f6d365@0.95',  # Golden color with 95% opacity
+                'boxborderw': 35,  # Extra padding to keep text inside box
+                'borderw': 6,  # Thick border for visibility
+                'bordercolor': '#fda085',  # Coral/peach border color
+                'x': '(w-text_w)/2',  # Center horizontally
+                'y': 170,  # Positioned from top
+                'shadowcolor': 'black@0.5',
+                'shadowx': 5,
+                'shadowy': 5
             })
 
-            # Add location overlay if needed
+            # LOCATION OVERLAY - Bottom left with golden background and border
             if show_location and location:
-                location_text = f"📍 {location}"
+                # Use simple location marker that renders properly
+                location_with_marker = f"▸ {location_escaped}"  # Triangle marker instead of emoji
                 stream = ffmpeg.filter(stream, 'drawtext', None, **{
-                    'text': location_escaped,
-                    'fontfile': 'C:/Windows/Fonts/arial.ttf',
-                    'fontcolor': 'white',
-                    'fontsize': 36,
+                    'text': location_with_marker,
+                    'fontfile': tamil_font_escaped,  # Tamil font for consistent styling
+                    'fontcolor': '#1a2b47',  # Dark blue text
+                    'fontsize': 36,  # Font size for location
                     'box': 1,
-                    'boxcolor': 'black@0.7',
-                    'boxborderw': 10,
-                    'x': 50,
-                    'y': 'h-100',
-                    'shadowcolor': 'black@0.5',
-                    'shadowx': 1,
-                    'shadowy': 1
+                    'boxcolor': '#f6d365@0.95',  # Golden color with 95% opacity
+                    'boxborderw': 28,  # Extra padding
+                    'borderw': 5,  # Thicker border matching headline
+                    'bordercolor': '#fda085',  # Coral/peach border color
+                    'x': 110,  # Position from left (accounting for video border)
+                    'y': 'h-200',  # Position from bottom
+                    'shadowcolor': 'black@0.4',
+                    'shadowx': 4,
+                    'shadowy': 4
                 })
 
             # Output with audio copy
@@ -300,7 +280,7 @@ class VideoProcessor:
             # Run FFmpeg
             ffmpeg.run(stream, overwrite_output=True, quiet=False)
 
-            print(f"   ✓ Text overlays added")
+            print(f"   ✓ Text overlays with golden borders added")
             return True
 
         except Exception as e:
@@ -392,6 +372,49 @@ class VideoProcessor:
             text = text.replace(old, new)
 
         return text
+
+    @staticmethod
+    def _wrap_text(text: str, max_chars_per_line: int = 30) -> str:
+        """
+        Wrap text to multiple lines based on character limit.
+
+        Args:
+            text: Text to wrap
+            max_chars_per_line: Maximum characters per line
+
+        Returns:
+            Text with line breaks inserted
+        """
+        if not text or len(text) <= max_chars_per_line:
+            return text
+
+        words = text.split()
+        lines = []
+        current_line = []
+        current_length = 0
+
+        for word in words:
+            word_length = len(word)
+            # Check if adding this word would exceed the limit
+            if current_length + word_length + len(current_line) > max_chars_per_line:
+                if current_line:  # Save current line and start new one
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                    current_length = word_length
+                else:  # Single word is too long, add it anyway
+                    lines.append(word)
+                    current_line = []
+                    current_length = 0
+            else:
+                current_line.append(word)
+                current_length += word_length
+
+        # Add the last line
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Use actual newline character for FFmpeg
+        return '\n'.join(lines)
 
     @staticmethod
     def extract_thumbnail(video_path: str, output_path: str, timestamp: float = 1.0) -> bool:
