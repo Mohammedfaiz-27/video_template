@@ -50,6 +50,18 @@ export const videoAPI = {
     return response.data;
   },
 
+  // Get AI metadata (same as getAnalysis, convenience method)
+  getAIMetadata: async (videoId) => {
+    const response = await api.get(`/videos/${videoId}/ai-metadata`);
+    return response.data;
+  },
+
+  // Regenerate AI suggestions
+  regenerateAISuggestions: async (videoId) => {
+    const response = await api.post(`/videos/${videoId}/regenerate-ai-metadata`);
+    return response.data;
+  },
+
   // Update metadata (headline/location)
   updateMetadata: async (videoId, metadata) => {
     const response = await api.patch(`/videos/${videoId}/metadata`, metadata);

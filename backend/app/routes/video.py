@@ -202,6 +202,61 @@ async def get_video_analysis(video_id: str):
     )
 
 
+@router.get("/{video_id}/ai-metadata", response_model=VideoAnalysisResponse)
+async def get_ai_metadata(video_id: str):
+    """
+    Get AI-generated headline and location metadata.
+    This is a convenience endpoint that returns the same data as /analysis.
+
+    Args:
+        video_id: Video ID
+
+    Returns:
+        VideoAnalysisResponse with AI suggestions
+    """
+    return await get_video_analysis(video_id)
+
+
+@router.post("/{video_id}/regenerate-ai-metadata", response_model=dict)
+async def regenerate_ai_metadata(video_id: str, background_tasks: BackgroundTasks):
+    """
+    Regenerate AI suggestions for headline and location.
+    This re-runs the AI analysis to generate fresh suggestions.
+
+    Args:
+        video_id: Video ID
+        background_tasks: FastAPI background tasks
+
+    Returns:
+        Message confirming regeneration started
+    """
+    from app.workers import regenerate_ai_suggestions_task
+
+    collection = get_videos_collection()
+    video = await collection.find_one({"_id": video_id})
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found"
+        )
+
+    if not video.get("transcript") or not video.get("visual_analysis"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Video must be analyzed first. Call /analyze endpoint."
+        )
+
+    # Trigger regeneration in background
+    background_tasks.add_task(regenerate_ai_suggestions_task, video_id)
+
+    return {
+        "video_id": video_id,
+        "message": "AI suggestion regeneration started. Poll /ai-metadata for updated results.",
+        "status": "regenerating"
+    }
+
+
 @router.patch("/{video_id}/metadata", response_model=MetadataUpdateResponse)
 async def update_metadata(video_id: str, request: MetadataUpdateRequest):
     """

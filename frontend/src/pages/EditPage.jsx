@@ -13,6 +13,7 @@ function EditPage() {
   const [showLocation, setShowLocation] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState('template1');
   const [rendering, setRendering] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -91,6 +92,44 @@ function EditPage() {
   const handleDownload = () => {
     const downloadURL = videoAPI.getDownloadURL(videoId);
     window.open(downloadURL, '_blank');
+  };
+
+  const handleRegenerateAI = async () => {
+    setRegenerating(true);
+    setError(null);
+
+    try {
+      // Trigger regeneration
+      await videoAPI.regenerateAISuggestions(videoId);
+
+      // Poll for updated suggestions
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+
+        try {
+          const updatedAnalysis = await videoAPI.getAnalysis(videoId);
+
+          // Update state with new suggestions
+          setAnalysis(updatedAnalysis);
+          setHeadline(updatedAnalysis.headline?.primary || '');
+          setLocation(updatedAnalysis.location?.text || '');
+          setRegenerating(false);
+          clearInterval(pollInterval);
+        } catch (err) {
+          if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            setError('Failed to get updated suggestions');
+            setRegenerating(false);
+          }
+        }
+      }, 2000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to regenerate suggestions');
+      setRegenerating(false);
+    }
   };
 
   if (loading) {
@@ -274,22 +313,29 @@ function EditPage() {
 
           {/* Headline Editor */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Headline *
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">
+                Headline *
+              </label>
+              {analysis?.headline?.confidence && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  ✨ AI Suggested ({(analysis.headline.confidence * 100).toFixed(0)}%)
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
-              maxLength={100}
+              maxLength={25}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your headline..."
+              placeholder="Short, catchy headline..."
             />
             <div className="flex justify-between mt-1">
               <p className="text-xs text-gray-500">
-                Make it catchy and engaging!
+                Keep it short and engaging!
               </p>
-              <p className="text-xs text-gray-500">{headline.length}/100</p>
+              <p className="text-xs text-gray-500">{headline.length}/25</p>
             </div>
 
             {/* Alternative Headlines */}
@@ -314,9 +360,16 @@ function EditPage() {
           {/* Location Editor */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-gray-700">
-                Location
-              </label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Location
+                </label>
+                {analysis?.location?.confidence && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    ✨ AI ({(analysis.location.confidence * 100).toFixed(0)}%)
+                  </span>
+                )}
+              </div>
               <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -331,12 +384,66 @@ function EditPage() {
               type="text"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              maxLength={50}
+              maxLength={25}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="City, State, Country"
+              placeholder="City or Location"
             />
             <p className="text-xs text-gray-500 mt-1">
-              {location.length}/50 characters
+              {location.length}/25 characters
+            </p>
+          </div>
+
+          {/* Regenerate AI Suggestions Button */}
+          <div className="mb-6">
+            <button
+              onClick={handleRegenerateAI}
+              disabled={regenerating}
+              className="w-full flex justify-center items-center py-2 px-4 border border-purple-300 rounded-md shadow-sm text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              {regenerating ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-700"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Regenerating AI Suggestions...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Regenerate AI Suggestions
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-500 text-center mt-1">
+              Get fresh headline and location suggestions from AI
             </p>
           </div>
 

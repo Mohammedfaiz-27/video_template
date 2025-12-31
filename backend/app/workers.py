@@ -7,7 +7,6 @@ from typing import Optional
 from app.database import get_videos_collection
 from app.models.video import VideoStatus
 from app.services.gemini_service import GeminiService
-from app.services.perplexity_service import PerplexityService
 from app.services.video_processor import VideoProcessor
 from app.services.storage_service import StorageService
 from app.utils.helpers import log_task_start, log_task_complete, log_error
@@ -60,21 +59,9 @@ async def analyze_video_task(video_id: str) -> bool:
 
         # Initialize services
         gemini = GeminiService()
-        perplexity = PerplexityService()
 
         # Run complete analysis
         transcript, visual, headline, location = await gemini.analyze_video_complete(video_path)
-
-        # Optional: Refine headline with Perplexity
-        if perplexity.is_available():
-            print("✨ Refining headline with Perplexity...")
-            context = f"Transcript: {transcript.text[:200]}\nScene: {visual.description}"
-            refined_headline = await perplexity.refine_headline(
-                headline.primary,
-                context,
-                headline.alternatives
-            )
-            headline.primary = refined_headline
 
         # Update database with analysis results
         await collection.update_one(
@@ -111,6 +98,78 @@ async def analyze_video_task(video_id: str) -> bool:
         )
 
         log_task_complete("Video Analysis", video_id, success=False)
+        return False
+
+
+async def regenerate_ai_suggestions_task(video_id: str) -> bool:
+    """
+    Background task for regenerating AI headline and location suggestions.
+    Uses existing transcript and visual analysis to generate fresh suggestions.
+
+    Args:
+        video_id: Video ID
+
+    Returns:
+        True if successful, False otherwise
+    """
+    log_task_start("AI Suggestion Regeneration", video_id)
+
+    try:
+        collection = get_videos_collection()
+
+        # Get video document
+        video = await collection.find_one({"_id": video_id})
+        if not video:
+            print(f"❌ Video not found: {video_id}")
+            return False
+
+        # Check if transcript and visual analysis exist
+        transcript_data = video.get("transcript")
+        visual_data = video.get("visual_analysis")
+
+        if not transcript_data or not visual_data:
+            raise ValueError("Video must be analyzed first (missing transcript or visual analysis)")
+
+        # Initialize services
+        gemini = GeminiService()
+
+        # Reconstruct objects from stored data
+        from app.models.video import TranscriptData, VisualAnalysis
+
+        transcript = TranscriptData(**transcript_data)
+        visual = VisualAnalysis(**visual_data)
+
+        # Regenerate headline
+        print("Regenerating headline...")
+        headline = await gemini.generate_headline(transcript.text, visual)
+        print(f"New headline: {headline.primary}")
+
+        # Regenerate location
+        print("Regenerating location...")
+        location = await gemini.detect_location(transcript.text, visual)
+        if location.text:
+            print(f"New location: {location.text}")
+        else:
+            print("No location detected")
+
+        # Update database with new suggestions (keeping transcript and visual unchanged)
+        await collection.update_one(
+            {"_id": video_id},
+            {
+                "$set": {
+                    "headline": headline.model_dump(),
+                    "location": location.model_dump() if location.text else None,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        log_task_complete("AI Suggestion Regeneration", video_id, success=True)
+        return True
+
+    except Exception as e:
+        log_error("AI Suggestion Regeneration", e)
+        log_task_complete("AI Suggestion Regeneration", video_id, success=False)
         return False
 
 

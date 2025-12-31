@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from PIL import Image
-import google.generativeai as genai
+import google.genai as genai
+from google.genai import types
 
 from app.config import settings
 from app.models.video import TranscriptData, VisualAnalysis, HeadlineData, LocationData
@@ -17,9 +18,9 @@ class GeminiService:
 
     def __init__(self):
         """Initialize Gemini service with API key."""
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
-        self.vision_model = genai.GenerativeModel('gemini-1.5-flash')
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        # Use Flash models for better free tier limits
+        self.model_name = 'gemini-2.0-flash-exp'
 
     async def analyze_video_complete(
         self,
@@ -62,40 +63,54 @@ class GeminiService:
 
     async def _upload_video_to_gemini(self, video_path: str):
         """
-        Upload video file to Gemini API using File API.
+        Upload video file to Gemini API using new google.genai package.
 
         Args:
             video_path: Path to video file
 
         Returns:
-            Gemini file object
+            Uploaded file object
         """
+        print(f"Uploading video to Gemini...")
+        print(f"File path: {video_path}")
+        print(f"File size: {Path(video_path).stat().st_size / (1024*1024):.2f} MB")
+
         try:
-            print(f"📤 Uploading video to Gemini...")
+            # Detect MIME type from file extension
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(video_path)
+            if not mime_type:
+                mime_type = 'video/mp4'  # Default to mp4
 
-            # Use the Files API to upload
-            video_file = genai.upload_file(video_path)
-            print(f"✓ Uploaded file: {video_file.name}")
+            print(f"MIME type: {mime_type}")
 
-            # Wait for processing to complete
-            while video_file.state.name == "PROCESSING":
-                print("⏳ Waiting for video processing...")
+            # Upload file using new API
+            with open(video_path, 'rb') as f:
+                uploaded_file = self.client.files.upload(file=f, config={'mime_type': mime_type})
+
+            print(f"Uploaded file: {uploaded_file.name}")
+            print(f"File URI: {uploaded_file.uri}")
+
+            # Wait for processing if needed
+            max_wait = 120
+            wait_time = 0
+            while uploaded_file.state == "PROCESSING":
+                if wait_time >= max_wait:
+                    raise TimeoutError(f"Video processing timeout")
+
+                print(f"Waiting for processing... ({wait_time}s)")
                 time.sleep(5)
-                video_file = genai.get_file(video_file.name)
+                wait_time += 5
+                uploaded_file = self.client.files.get(name=uploaded_file.name)
 
-            if video_file.state.name == "FAILED":
+            if uploaded_file.state == "FAILED":
                 raise Exception(f"Video processing failed")
 
-            print(f"✓ Video ready for analysis")
-            return video_file
+            print(f"Video ready (state: {uploaded_file.state})")
+            return uploaded_file
 
-        except AttributeError as e:
-            # Fallback: If upload_file doesn't exist, return path for direct use
-            print(f"⚠️ File upload API not available, using direct video path")
-            print(f"   This may work with shorter videos only")
-            return video_path
         except Exception as e:
-            print(f"❌ Error uploading video: {e}")
+            print(f"ERROR: {type(e).__name__}: {e}")
             raise
 
     async def extract_transcript(self, video_file) -> TranscriptData:
@@ -124,16 +139,29 @@ class GeminiService:
             Be accurate with language detection.
             """
 
-            response = self.model.generate_content(
-                [video_file, prompt],
-                generation_config={
-                    "temperature": 0.3,
-                    "response_mime_type": "application/json"
-                }
+            # Use new API for content generation
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
+                    types.Part.from_text(prompt)
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                )
             )
 
-            # Parse response
-            result = json.loads(response.text)
+            # Parse JSON response
+            response_text = response.text.strip()
+
+            if not response_text:
+                print(f"WARNING: Empty response")
+                raise ValueError("Empty response from Gemini")
+
+            print(f"Transcript response: {len(response_text)} chars")
+
+            result = json.loads(response_text)
 
             return TranscriptData(
                 text=result.get("text", ""),
@@ -184,16 +212,20 @@ class GeminiService:
             - description: 1-2 sentence summary of the visual content
             """
 
-            response = self.vision_model.generate_content(
-                [video_file, prompt],
-                generation_config={
-                    "temperature": 0.4,
-                    "response_mime_type": "application/json"
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
+                    types.Part.from_text(prompt)
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.4,
+                    response_mime_type="application/json"
+                )
             )
 
-            # Parse response
-            result = json.loads(response.text)
+            response_text = response.text.strip()
+            result = json.loads(response_text)
 
             return VisualAnalysis(
                 scene_type=result.get("scene_type", "unknown"),
@@ -266,16 +298,22 @@ class GeminiService:
             Make the primary headline the absolute best option.
             """
 
-            response = self.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": 0.7,
-                    "response_mime_type": "application/json"
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json"
+                )
             )
 
-            # Parse response
-            result = json.loads(response.text)
+            response_text = response.text.strip()
+
+            if not response_text:
+                raise ValueError("Empty response")
+
+            print(f"Headline response: {len(response_text)} chars")
+            result = json.loads(response_text)
 
             return HeadlineData(
                 primary=result.get("primary", "Untitled Video"),
@@ -342,16 +380,17 @@ class GeminiService:
             - source: where the location info came from
             """
 
-            response = self.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": 0.3,
-                    "response_mime_type": "application/json"
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                )
             )
 
-            # Parse response
-            result = json.loads(response.text)
+            response_text = response.text.strip()
+            result = json.loads(response_text)
 
             return LocationData(
                 text=result.get("text"),
@@ -395,9 +434,10 @@ class GeminiService:
             Keep it engaging and click-worthy.
             """
 
-            response = self.model.generate_content(
-                prompt,
-                generation_config={"temperature": 0.7}
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.7)
             )
 
             return response.text.strip()
