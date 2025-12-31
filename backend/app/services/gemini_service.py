@@ -19,8 +19,8 @@ class GeminiService:
     def __init__(self):
         """Initialize Gemini service with API key."""
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        # Use Flash models for better free tier limits
-        self.model_name = 'gemini-2.0-flash-exp'
+        # Use latest stable Gemini 2.5 Flash (good quota, fast)
+        self.model_name = 'models/gemini-2.5-flash'
 
     async def analyze_video_complete(
         self,
@@ -28,6 +28,7 @@ class GeminiService:
     ) -> Tuple[TranscriptData, VisualAnalysis, HeadlineData, LocationData]:
         """
         Complete video analysis pipeline.
+        NEW APPROACH: Extract transcript once, then use text-only analysis.
 
         Args:
             video_path: Path to video file
@@ -35,29 +36,35 @@ class GeminiService:
         Returns:
             Tuple of (transcript, visual_analysis, headline, location)
         """
-        print(f"🎬 Starting complete analysis for: {video_path}")
+        print(f"Starting complete analysis: {video_path}")
 
         # Upload video to Gemini
         video_file = await self._upload_video_to_gemini(video_path)
 
-        # Extract transcript
+        # Extract transcript (includes speech + visible text)
         transcript = await self.extract_transcript(video_file)
-        print(f"✓ Transcript extracted: {len(transcript.text)} chars")
+        print(f"Transcript extracted: {len(transcript.text)} chars")
 
-        # Analyze visual content
-        visual = await self.analyze_visual_content(video_file)
-        print(f"✓ Visual analysis complete: {visual.scene_type}")
+        # Simple visual check (optional - just for metadata)
+        visual = VisualAnalysis(
+            scene_type="video",
+            people_count=0,
+            objects=[],
+            mood="neutral",
+            landmarks=[],
+            description="Video content"
+        )
 
-        # Generate headline
-        headline = await self.generate_headline(transcript.text, visual)
-        print(f"✓ Headline generated: {headline.primary}")
+        # Generate headline FROM TRANSCRIPT ONLY (no video re-upload)
+        headline = await self.generate_headline_from_text(transcript.text)
+        print(f"Headline generated: {headline.primary}")
 
-        # Detect location
-        location = await self.detect_location(transcript.text, visual)
+        # Detect location FROM TRANSCRIPT ONLY
+        location = await self.detect_location_from_text(transcript.text)
         if location.text:
-            print(f"✓ Location detected: {location.text}")
+            print(f"Location detected: {location.text}")
         else:
-            print("ℹ No location detected")
+            print("No location detected")
 
         return transcript, visual, headline, location
 
@@ -115,27 +122,31 @@ class GeminiService:
 
     async def extract_transcript(self, video_file) -> TranscriptData:
         """
-        Extract audio transcript from video using Gemini.
+        Extract BOTH speech and visible text from video using Gemini.
 
         Args:
             video_file: Gemini uploaded video file
 
         Returns:
-            TranscriptData with transcript text and metadata
+            TranscriptData with combined transcript
         """
         try:
             prompt = """
-            Analyze the audio in this video and provide a complete transcript.
+            Analyze this video and extract ALL text information:
+            1. Transcribe all spoken words (dialogue, narration)
+            2. Extract all visible text on screen (signs, captions, overlays, text graphics)
+
+            Combine both into a comprehensive transcript.
 
             Return a JSON object with this exact structure:
             {
-                "text": "Complete transcript of all spoken words",
+                "text": "Combined transcript: [spoken content] + [visible text]",
                 "language": "detected language code (e.g., 'en', 'hi', 'es')",
                 "language_confidence": 0.95,
                 "has_significant_audio": true
             }
 
-            If there is no speech, set text to empty string and has_significant_audio to false.
+            If there is no speech or text, set text to empty string.
             Be accurate with language detection.
             """
 
@@ -144,7 +155,7 @@ class GeminiService:
                 model=self.model_name,
                 contents=[
                     types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
-                    types.Part.from_text(prompt)
+                    prompt  # Just pass the text directly
                 ],
                 config=types.GenerateContentConfig(
                     temperature=0.3,
@@ -216,7 +227,7 @@ class GeminiService:
                 model=self.model_name,
                 contents=[
                     types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
-                    types.Part.from_text(prompt)
+                    prompt  # Just pass text directly
                 ],
                 config=types.GenerateContentConfig(
                     temperature=0.4,
@@ -401,6 +412,141 @@ class GeminiService:
 
         except Exception as e:
             print(f"❌ Error detecting location: {e}")
+            return LocationData(
+                text=None,
+                confidence=0.0,
+                source="none",
+                coordinates=None
+            )
+
+    async def generate_headline_from_text(self, transcript: str) -> HeadlineData:
+        """
+        Generate engaging headline from transcript text ONLY (no video).
+        EFFICIENT: Text-only analysis, no video re-upload needed.
+
+        Args:
+            transcript: Combined transcript (speech + visible text)
+
+        Returns:
+            HeadlineData with primary headline and alternatives
+        """
+        try:
+            if not transcript or len(transcript.strip()) < 10:
+                return HeadlineData(
+                    primary="Untitled Video",
+                    alternatives=["Watch This!", "Amazing Content"],
+                    confidence=0.3,
+                    tone="neutral"
+                )
+
+            prompt = f"""
+            Based on this video transcript, generate engaging headlines for social media.
+
+            Transcript:
+            {transcript[:1000]}
+
+            Create headlines that are:
+            - 5-10 words long
+            - Attention-grabbing and click-worthy
+            - Relevant to the content
+            - Suitable for Instagram, TikTok, YouTube Shorts
+            - Natural and conversational
+
+            Return a JSON object with this exact structure:
+            {{
+                "primary": "Most engaging headline",
+                "alternatives": ["Alternative 1", "Alternative 2", "Alternative 3"],
+                "confidence": 0.85,
+                "tone": "exciting/informative/funny/emotional/inspirational"
+            }}
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json"
+                )
+            )
+
+            result = json.loads(response.text.strip())
+
+            return HeadlineData(
+                primary=result.get("primary", "Untitled Video"),
+                alternatives=result.get("alternatives", []),
+                confidence=result.get("confidence", 0.5),
+                tone=result.get("tone", "neutral")
+            )
+
+        except Exception as e:
+            print(f"Error generating headline: {e}")
+            return HeadlineData(
+                primary="Amazing Video",
+                alternatives=["Watch This!", "You Won't Believe This"],
+                confidence=0.3,
+                tone="neutral"
+            )
+
+    async def detect_location_from_text(self, transcript: str) -> LocationData:
+        """
+        Detect location from transcript text ONLY (no video).
+        EFFICIENT: Text-only analysis, no video re-upload needed.
+
+        Args:
+            transcript: Combined transcript (speech + visible text)
+
+        Returns:
+            LocationData with detected location
+        """
+        try:
+            if not transcript or len(transcript.strip()) < 10:
+                return LocationData(
+                    text=None,
+                    confidence=0.0,
+                    source="none",
+                    coordinates=None
+                )
+
+            prompt = f"""
+            Identify any location mentioned in this video transcript.
+
+            Transcript:
+            {transcript[:1000]}
+
+            Return a JSON object with this exact structure:
+            {{
+                "text": "City, Region, Country" or null if no location detected,
+                "confidence": 0.85,
+                "source": "transcript"
+            }}
+
+            Guidelines:
+            - Look for place names, landmarks, cities, regions mentioned
+            - Format: "City, Region, Country" (e.g., "Paris, Île-de-France, France")
+            - If uncertain, set text to null and confidence low
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                )
+            )
+
+            result = json.loads(response.text.strip())
+
+            return LocationData(
+                text=result.get("text"),
+                confidence=result.get("confidence", 0.0),
+                source=result.get("source", "transcript"),
+                coordinates=None
+            )
+
+        except Exception as e:
+            print(f"Error detecting location: {e}")
             return LocationData(
                 text=None,
                 confidence=0.0,

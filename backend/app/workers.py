@@ -139,14 +139,14 @@ async def regenerate_ai_suggestions_task(video_id: str) -> bool:
         transcript = TranscriptData(**transcript_data)
         visual = VisualAnalysis(**visual_data)
 
-        # Regenerate headline
-        print("Regenerating headline...")
-        headline = await gemini.generate_headline(transcript.text, visual)
+        # Regenerate headline FROM TEXT ONLY (efficient!)
+        print("Regenerating headline from transcript...")
+        headline = await gemini.generate_headline_from_text(transcript.text)
         print(f"New headline: {headline.primary}")
 
-        # Regenerate location
-        print("Regenerating location...")
-        location = await gemini.detect_location(transcript.text, visual)
+        # Regenerate location FROM TEXT ONLY (efficient!)
+        print("Regenerating location from transcript...")
+        location = await gemini.detect_location_from_text(transcript.text)
         if location.text:
             print(f"New location: {location.text}")
         else:
