@@ -111,20 +111,25 @@
             border: 2px solid #fff;
             box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
             display: {{show_location}}; /* Controlled by variable */
+            max-width: 600px; /* Limit box width */
         }
 
         .location-text {
             color: white;
-            font-size: 32px;
+            font-size: 28px; /* Slightly smaller for longer text */
             font-weight: bold;
             display: flex;
             align-items: center;
             text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+            word-wrap: break-word; /* Wrap long words */
+            overflow-wrap: break-word; /* Break long text */
+            line-height: 1.2;
         }
 
         .location-icon {
             margin-right: 10px;
-            font-size: 32px;
+            font-size: 28px;
+            flex-shrink: 0; /* Keep icon size fixed */
         }
 
         /* 4. DATE (Bottom Right) */

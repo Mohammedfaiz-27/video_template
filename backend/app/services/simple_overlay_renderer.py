@@ -362,8 +362,21 @@ class SimpleOverlayRenderer:
                 loc_y = height - 100
                 loc_x = 40
 
-                # Rounded location box (left side only)
-                loc_width = 300
+                # Load smaller font for location to prevent overflow
+                try:
+                    font_location_small = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 28)
+                except:
+                    font_location_small = ImageFont.load_default()
+
+                # Calculate text width with smaller font
+                loc_text = f"📍 {location}"
+                test_img = Image.new('RGB', (1, 1))
+                test_draw = ImageDraw.Draw(test_img)
+                bbox = test_draw.textbbox((0, 0), loc_text, font=font_location_small)
+                text_width = bbox[2] - bbox[0]
+
+                # Dynamic box width (minimum 300px, maximum 600px to match HTML)
+                loc_width = min(max(text_width + 80, 300), 600)
                 loc_height = 62
 
                 # Draw background with rounded left side, straight right side
@@ -378,10 +391,9 @@ class SimpleOverlayRenderer:
                 draw.line([loc_x+loc_width, loc_y, loc_x+loc_width, loc_y+loc_height], fill=(255, 255, 255, 255), width=2)
                 draw.line([loc_x+30, loc_y+loc_height, loc_x+loc_width, loc_y+loc_height], fill=(255, 255, 255, 255), width=2)
 
-                # Location text
-                loc_text = f"📍 {location}"
-                draw.text((loc_x+150, loc_y+31), loc_text,
-                         fill=(255, 255, 255, 255), font=font_location, anchor="mm")
+                # Location text (using smaller font to match HTML 28px)
+                draw.text((loc_x+loc_width//2, loc_y+31), loc_text,
+                         fill=(255, 255, 255, 255), font=font_location_small, anchor="mm")
 
             # 6. Date box (bottom right)
             from datetime import datetime
