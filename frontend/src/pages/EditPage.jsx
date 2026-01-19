@@ -450,10 +450,10 @@ function EditPage() {
           {/* Visual Analysis */}
           {analysis?.visual_analysis && analysis.visual_analysis.scene_type !== 'unknown' && (
             <div className="mb-6 p-4 bg-gray-50 rounded-md">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">AI Analysis</h3>
+              {/* <h3 className="text-sm font-medium text-gray-700 mb-2">AI Analysis</h3> */}
               <div className="space-y-1 text-sm text-gray-600">
-                <p><span className="font-medium">Scene:</span> {analysis.visual_analysis.scene_type}</p>
-                <p><span className="font-medium">Mood:</span> {analysis.visual_analysis.mood}</p>
+                {/* <p><span className="font-medium">Scene:</span> {analysis.visual_analysis.scene_type}</p>
+                <p><span className="font-medium">Mood:</span> {analysis.visual_analysis.mood}</p> */}
                 {analysis.visual_analysis.objects?.length > 0 && (
                   <p><span className="font-medium">Objects:</span> {analysis.visual_analysis.objects.join(', ')}</p>
                 )}

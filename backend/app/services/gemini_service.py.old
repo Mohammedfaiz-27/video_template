@@ -141,13 +141,13 @@ class GeminiService:
             Return a JSON object with this exact structure:
             {
                 "text": "Combined transcript: [spoken content] + [visible text]",
-                "language": "detected language code (e.g., 'en', 'ta', 'hi', 'es')",
+                "language": "detected language code (e.g., 'en', 'hi', 'es')",
                 "language_confidence": 0.95,
                 "has_significant_audio": true
             }
 
             If there is no speech or text, set text to empty string.
-            Be accurate with language detection. Use 'ta' for Tamil, 'hi' for Hindi, 'en' for English.
+            Be accurate with language detection.
             """
 
             # Use new API for content generation
@@ -191,11 +191,238 @@ class GeminiService:
                 has_significant_audio=False
             )
 
+    async def analyze_visual_content(self, video_file) -> VisualAnalysis:
+        """
+        Analyze visual content of video using Gemini.
+
+        Args:
+            video_file: Gemini uploaded video file
+
+        Returns:
+            VisualAnalysis with scene information
+        """
+        try:
+            prompt = """
+            Analyze the visual content of this video thoroughly.
+
+            Return a JSON object with this exact structure:
+            {
+                "scene_type": "outdoor/indoor/mixed",
+                "people_count": 2,
+                "objects": ["tree", "building", "car"],
+                "mood": "happy/sad/energetic/calm/professional/casual",
+                "landmarks": ["Eiffel Tower", "Golden Gate Bridge"],
+                "description": "Brief description of what's happening in the video"
+            }
+
+            - scene_type: Classify the primary setting
+            - people_count: Estimate number of people visible
+            - objects: List 3-5 prominent objects or elements
+            - mood: Overall tone/atmosphere
+            - landmarks: Any recognizable landmarks or famous locations (empty array if none)
+            - description: 1-2 sentence summary of the visual content
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
+                    prompt  # Just pass text directly
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.4,
+                    response_mime_type="application/json"
+                )
+            )
+
+            response_text = response.text.strip()
+            result = json.loads(response_text)
+
+            return VisualAnalysis(
+                scene_type=result.get("scene_type", "unknown"),
+                people_count=result.get("people_count", 0),
+                objects=result.get("objects", []),
+                mood=result.get("mood", "neutral"),
+                landmarks=result.get("landmarks", []),
+                description=result.get("description", "")
+            )
+
+        except Exception as e:
+            print(f"❌ Error analyzing visual content: {e}")
+            return VisualAnalysis(
+                scene_type="unknown",
+                people_count=0,
+                objects=[],
+                mood="neutral",
+                landmarks=[],
+                description="Visual analysis failed"
+            )
+
+    async def generate_headline(
+        self,
+        transcript: str,
+        visual_analysis: VisualAnalysis
+    ) -> HeadlineData:
+        """
+        Generate engaging headline based on transcript and visual analysis.
+
+        Args:
+            transcript: Video transcript text
+            visual_analysis: Visual content analysis
+
+        Returns:
+            HeadlineData with primary headline and alternatives
+        """
+        try:
+            # Build context
+            context = f"""
+            Video Transcript: {transcript[:500] if transcript else "No speech detected"}
+
+            Visual Context:
+            - Scene: {visual_analysis.scene_type}
+            - People: {visual_analysis.people_count}
+            - Objects: {', '.join(visual_analysis.objects)}
+            - Mood: {visual_analysis.mood}
+            - Description: {visual_analysis.description}
+            """
+
+            prompt = f"""
+            Based on this video analysis, generate engaging headlines for social media.
+
+            {context}
+
+            Create headlines that are:
+            - 5-10 words long
+            - Attention-grabbing and click-worthy
+            - Relevant to the content
+            - Suitable for platforms like Instagram, TikTok, YouTube Shorts
+            - Natural and conversational
+
+            Return a JSON object with this exact structure:
+            {{
+                "primary": "Most engaging headline",
+                "alternatives": ["Alternative headline 1", "Alternative headline 2", "Alternative headline 3"],
+                "confidence": 0.85,
+                "tone": "exciting/informative/funny/emotional/inspirational"
+            }}
+
+            Make the primary headline the absolute best option.
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    response_mime_type="application/json"
+                )
+            )
+
+            response_text = response.text.strip()
+
+            if not response_text:
+                raise ValueError("Empty response")
+
+            print(f"Headline response: {len(response_text)} chars")
+            result = json.loads(response_text)
+
+            return HeadlineData(
+                primary=result.get("primary", "Untitled Video"),
+                alternatives=result.get("alternatives", []),
+                confidence=result.get("confidence", 0.5),
+                tone=result.get("tone", "neutral")
+            )
+
+        except Exception as e:
+            print(f"❌ Error generating headline: {e}")
+            return HeadlineData(
+                primary="Amazing Video",
+                alternatives=["Watch This!", "You Won't Believe This"],
+                confidence=0.3,
+                tone="neutral"
+            )
+
+    async def detect_location(
+        self,
+        transcript: str,
+        visual_analysis: VisualAnalysis
+    ) -> LocationData:
+        """
+        Detect location from transcript and visual analysis.
+
+        Args:
+            transcript: Video transcript text
+            visual_analysis: Visual content analysis
+
+        Returns:
+            LocationData with detected location
+        """
+        try:
+            # Check if landmarks are detected
+            has_landmarks = len(visual_analysis.landmarks) > 0
+
+            context = f"""
+            Video Transcript: {transcript[:300] if transcript else "No speech detected"}
+
+            Visual Analysis:
+            - Scene: {visual_analysis.scene_type}
+            - Landmarks: {', '.join(visual_analysis.landmarks) if has_landmarks else "None detected"}
+            - Description: {visual_analysis.description}
+            """
+
+            prompt = f"""
+            Identify any location mentioned or visible in this video.
+
+            {context}
+
+            Return a JSON object with this exact structure:
+            {{
+                "text": "City, State/Region, Country" or null if no location detected,
+                "confidence": 0.85,
+                "source": "transcript/visual/landmark/none"
+            }}
+
+            Guidelines:
+            - If landmarks are detected, use them to determine location
+            - If location is mentioned in transcript, extract it
+            - If visual clues suggest a location, identify it
+            - Format: "City, Region, Country" (e.g., "Paris, Île-de-France, France")
+            - If uncertain, set text to null and confidence low
+            - source: where the location info came from
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                )
+            )
+
+            response_text = response.text.strip()
+            result = json.loads(response_text)
+
+            return LocationData(
+                text=result.get("text"),
+                confidence=result.get("confidence", 0.0),
+                source=result.get("source", "none"),
+                coordinates=None  # TODO: Add geocoding if needed
+            )
+
+        except Exception as e:
+            print(f"❌ Error detecting location: {e}")
+            return LocationData(
+                text=None,
+                confidence=0.0,
+                source="none",
+                coordinates=None
+            )
+
     async def generate_headline_from_text(self, transcript: str) -> HeadlineData:
         """
         Generate engaging headline from transcript text ONLY (no video).
         EFFICIENT: Text-only analysis, no video re-upload needed.
-        LANGUAGE-AWARE: Generates headlines in the same language as the transcript.
 
         Args:
             transcript: Combined transcript (speech + visible text)
@@ -218,31 +445,20 @@ class GeminiService:
             Transcript:
             {transcript[:1000]}
 
-            CRITICAL LANGUAGE INSTRUCTION:
-            - Detect the language of the transcript carefully
-            - Generate ALL headlines in the EXACT SAME LANGUAGE as the transcript
-            - If transcript is in Tamil (தமிழ்), ALL headlines MUST be in Tamil script only
-            - If transcript is in Hindi (हिंदी), ALL headlines MUST be in Hindi script only
-            - If transcript is in English, ALL headlines MUST be in English only
-            - Do NOT mix languages - keep everything in the detected language
-            - Preserve the native script and writing system
-
             Create headlines that are:
-            - 5-10 words long (or equivalent in the detected language)
+            - 5-10 words long
             - Attention-grabbing and click-worthy
             - Relevant to the content
             - Suitable for Instagram, TikTok, YouTube Shorts
-            - Natural and conversational in the detected language
+            - Natural and conversational
 
             Return a JSON object with this exact structure:
             {{
-                "primary": "Most engaging headline in the detected language",
+                "primary": "Most engaging headline",
                 "alternatives": ["Alternative 1", "Alternative 2", "Alternative 3"],
                 "confidence": 0.85,
                 "tone": "exciting/informative/funny/emotional/inspirational"
             }}
-
-            IMPORTANT: All text in primary and alternatives MUST be in the same language as the transcript.
             """
 
             response = self.client.models.generate_content(
@@ -276,7 +492,6 @@ class GeminiService:
         """
         Detect location from transcript text ONLY (no video).
         EFFICIENT: Text-only analysis, no video re-upload needed.
-        LANGUAGE-AWARE: Returns location in the same language as the transcript.
 
         Args:
             transcript: Combined transcript (speech + visible text)
@@ -299,27 +514,17 @@ class GeminiService:
             Transcript:
             {transcript[:1000]}
 
-            CRITICAL LANGUAGE INSTRUCTION:
-            - Detect the language of the transcript carefully
-            - Return the location name in the EXACT SAME LANGUAGE as the transcript
-            - If transcript is in Tamil (தமிழ்), return location in Tamil ONLY (e.g., "திருவாரூர், தமிழ்நாடு, இந்தியா")
-            - If transcript is in Hindi (हिंदी), return location in Hindi ONLY (e.g., "दिल्ली, भारत")
-            - If transcript is in English, return location in English ONLY (e.g., "Paris, France")
-            - Do NOT mix languages - use only the native script of the detected language
-
             Return a JSON object with this exact structure:
             {{
-                "text": "City, Region, Country in the detected language" or null if no location detected,
+                "text": "City, Region, Country" or null if no location detected,
                 "confidence": 0.85,
                 "source": "transcript"
             }}
 
             Guidelines:
             - Look for place names, landmarks, cities, regions mentioned
-            - Return location in the same language and script as the transcript
+            - Format: "City, Region, Country" (e.g., "Paris, Île-de-France, France")
             - If uncertain, set text to null and confidence low
-
-            IMPORTANT: The location text MUST be in the same language as the transcript.
             """
 
             response = self.client.models.generate_content(
@@ -348,3 +553,41 @@ class GeminiService:
                 source="none",
                 coordinates=None
             )
+
+    async def refine_headline_with_context(
+        self,
+        headline: str,
+        context: str
+    ) -> str:
+        """
+        Refine a headline with additional context.
+
+        Args:
+            headline: Original headline
+            context: Additional context or user feedback
+
+        Returns:
+            Refined headline
+        """
+        try:
+            prompt = f"""
+            Refine this headline based on the context provided.
+
+            Original Headline: {headline}
+            Context: {context}
+
+            Return a single refined headline (5-10 words) that incorporates the context.
+            Keep it engaging and click-worthy.
+            """
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.7)
+            )
+
+            return response.text.strip()
+
+        except Exception as e:
+            print(f"❌ Error refining headline: {e}")
+            return headline

@@ -56,3 +56,4 @@ Thumbs.db
 # Plan files
 .claude/
 nul
+.html.backup
