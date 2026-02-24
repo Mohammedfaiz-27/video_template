@@ -22,27 +22,25 @@ class SimpleOverlayRenderer:
 
         if bold:
             return [
-                # Arial Bold for Latin text (most reliable)
-                "C:/Windows/Fonts/arialbd.ttf",
-                # Nirmala UI supports both Latin and Tamil (.ttc format)
-                "C:/Windows/Fonts/Nirmala.ttc",
-                # Arial regular as fallback
-                "C:/Windows/Fonts/arial.ttf",
-                # Tamil-only fonts (for Tamil text only)
+                # NotoSansTamil supports Tamil (project fonts, always available)
                 str(fonts_dir / "NotoSansTamil-Bold.ttf"),
                 str(fonts_dir / "NotoSansTamil-Regular.ttf"),
+                # Nirmala UI supports both Latin and Tamil (.ttc format)
+                "C:/Windows/Fonts/Nirmala.ttc",
+                # Arial Bold for Latin text (no Tamil support)
+                "C:/Windows/Fonts/arialbd.ttf",
+                "C:/Windows/Fonts/arial.ttf",
             ]
         else:
             return [
-                # Arial for Latin text (most reliable)
-                "C:/Windows/Fonts/arial.ttf",
-                # Nirmala UI supports both Latin and Tamil (.ttc format)
-                "C:/Windows/Fonts/Nirmala.ttc",
-                # Arial Bold as fallback
-                "C:/Windows/Fonts/arialbd.ttf",
-                # Tamil-only fonts (for Tamil text only)
+                # NotoSansTamil supports Tamil (project fonts, always available)
                 str(fonts_dir / "NotoSansTamil-Regular.ttf"),
                 str(fonts_dir / "NotoSansTamil-Bold.ttf"),
+                # Nirmala UI supports both Latin and Tamil (.ttc format)
+                "C:/Windows/Fonts/Nirmala.ttc",
+                # Arial for Latin text (no Tamil support)
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/arialbd.ttf",
             ]
 
     @staticmethod

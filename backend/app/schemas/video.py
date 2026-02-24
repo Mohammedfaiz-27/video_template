@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.models.video import VideoStatus, TranscriptData, VisualAnalysis, HeadlineData, LocationData
 
 
@@ -37,9 +37,16 @@ class VideoAnalysisResponse(BaseModel):
 # Metadata Update Schemas
 class MetadataUpdateRequest(BaseModel):
     """Request to update video metadata."""
-    headline: Optional[str] = Field(None, min_length=5, max_length=100)
-    location: Optional[str] = Field(None, min_length=2, max_length=50)
+    headline: Optional[str] = Field(None, max_length=200)
+    location: Optional[str] = Field(None, max_length=100)
     show_location: Optional[bool] = None
+
+    @field_validator("headline", "location", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 class MetadataUpdateResponse(BaseModel):
@@ -53,10 +60,17 @@ class MetadataUpdateResponse(BaseModel):
 # Render Schemas
 class RenderRequest(BaseModel):
     """Request to render video."""
-    headline: Optional[str] = Field(None, min_length=5, max_length=100)
-    location: Optional[str] = Field(None, min_length=2, max_length=50)
+    headline: Optional[str] = Field(None, max_length=200)
+    location: Optional[str] = Field(None, max_length=100)
     show_location: bool = True
     template_id: str = Field("template1", description="Template to use: template1, template2, template3, template4")
+
+    @field_validator("headline", "location", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 class RenderResponse(BaseModel):
