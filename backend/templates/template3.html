@@ -3,10 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=1080, height=1920">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
+        /* Embedded Tamil font - Noto Sans Tamil */
+        @font-face {
+            font-family: 'TamilFont';
+            src: url('../assets/fonts/NotoSansTamil-Bold.ttf') format('truetype'),
+                 local('Nirmala UI Bold'), local('NirmalaUI-Bold'), local('Nirmala UI');
+            font-weight: bold;
+        }
+        @font-face {
+            font-family: 'TamilFont';
+            src: url('../assets/fonts/NotoSansTamil-Regular.ttf') format('truetype'),
+                 local('Nirmala UI'), local('NirmalaUI'), local('Latha'), local('Vijaya');
+            font-weight: normal;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -17,7 +28,7 @@
             width: 1080px;
             height: 1920px;
             overflow: hidden;
-            font-family: 'Helvetica Neue', 'Arial', sans-serif;
+            font-family: 'TamilFont', 'Nirmala UI', 'Latha', 'Vijaya', 'Tamil MN', 'Arial Unicode MS', sans-serif;
             position: relative;
             background: #ffffff;
         }

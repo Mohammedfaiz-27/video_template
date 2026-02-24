@@ -161,21 +161,34 @@ class VideoProcessor:
                     'black'
                 )
 
-            # Get audio stream from input
-            audio = input_stream.audio
-
-            # Output with video and audio
-            print("   🔊 Preserving audio in 9:16 conversion...")
-            stream = ffmpeg.output(
-                video,
-                audio,
-                output_path,
-                vcodec='libx264',
-                acodec='aac',
-                preset='medium',
-                crf=23,
-                **{'b:a': '192k'}
+            # Check if input has audio stream
+            has_audio = any(
+                s for s in ffmpeg.probe(input_path)['streams']
+                if s['codec_type'] == 'audio'
             )
+
+            if has_audio:
+                audio = input_stream.audio
+                print("   🔊 Preserving audio in 9:16 conversion...")
+                stream = ffmpeg.output(
+                    video,
+                    audio,
+                    output_path,
+                    vcodec='libx264',
+                    acodec='aac',
+                    preset='medium',
+                    crf=23,
+                    **{'b:a': '192k'}
+                )
+            else:
+                print("   ℹ️  No audio stream found, processing video only...")
+                stream = ffmpeg.output(
+                    video,
+                    output_path,
+                    vcodec='libx264',
+                    preset='medium',
+                    crf=23,
+                )
 
             # Run FFmpeg
             ffmpeg.run(stream, overwrite_output=True, quiet=False)
@@ -417,44 +430,20 @@ class VideoProcessor:
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
                 overlay_path = tmp.name
 
-            # Try HTML rendering first (requires html2image + Chrome)
-            html_success = False
-            try:
-                from app.services.html_renderer import HTMLRendererSync
+            # Use Pillow renderer (reliable font loading from disk)
+            print(f"   🎨 Rendering overlay with Pillow...")
+            from app.services.simple_overlay_renderer import SimpleOverlayRenderer
 
-                template_data = {
-                    'headline': headline,
-                    'location': location or '',
-                    'show_location': show_location
-                }
-
-                print(f"   📄 Trying HTML rendering...")
-                html_success = HTMLRendererSync.render_template(
-                    template_name=template_name,
-                    output_path=overlay_path,
-                    data=template_data,
-                    width=1080,
-                    height=1920
-                )
-            except Exception as e:
-                print(f"   ⚠️  HTML rendering not available: {e}")
-
-            # Fallback to Pillow if HTML failed
-            if not html_success:
-                print(f"   🎨 Using Pillow fallback renderer...")
-                from app.services.simple_overlay_renderer import SimpleOverlayRenderer
-
-                # Use Pillow renderer for any template
-                success = SimpleOverlayRenderer.create_overlay(
-                    template_name=template_name,
-                    output_path=overlay_path,
-                    headline=headline,
-                    location=location,
-                    show_location=show_location
-                )
-                if not success:
-                    print(f"   ❌ Pillow rendering also failed")
-                    return False
+            success = SimpleOverlayRenderer.create_overlay(
+                template_name=template_name,
+                output_path=overlay_path,
+                headline=headline,
+                location=location,
+                show_location=show_location
+            )
+            if not success:
+                print(f"   ❌ Overlay rendering failed")
+                return False
 
             # Step 2: Convert video to 9:16 and composite with overlay using direct FFmpeg
             print(f"   🎬 Converting video to 9:16 format and compositing overlay...")

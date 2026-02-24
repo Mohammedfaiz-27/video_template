@@ -5,6 +5,7 @@ from typing import Optional, Dict
 from datetime import datetime
 import tempfile
 import os
+import base64
 
 
 class HTMLRenderer:
@@ -50,10 +51,18 @@ class HTMLRenderer:
             # Replace placeholders with actual data
             html_content = self._inject_data(html_content, data)
 
-            # Initialize html2image
+            # Initialize html2image with font rendering support
             hti = Html2Image(
                 output_path=str(Path(output_path).parent),
-                size=(width, height)
+                size=(width, height),
+                custom_flags=[
+                    '--font-render-hinting=none',
+                    '--disable-font-subpixel-positioning',
+                    '--force-device-scale-factor=1',
+                    '--hide-scrollbars',
+                    '--allow-file-access-from-files',  # Allow loading local fonts
+                    '--disable-web-security'  # Allow cross-origin font loading
+                ]
             )
 
             # Render HTML to image
@@ -99,6 +108,34 @@ class HTMLRenderer:
 
         for placeholder, value in replacements.items():
             html_content = html_content.replace(placeholder, str(value))
+
+        # Embed fonts as base64 data URIs so Chrome headless can load them
+        fonts_dir = self.templates_dir.parent / 'assets' / 'fonts'
+        for font_file in fonts_dir.glob('*.ttf'):
+            relative_url = f"url('../assets/fonts/{font_file.name}')"
+            try:
+                font_data = font_file.read_bytes()
+                b64 = base64.b64encode(font_data).decode('ascii')
+                data_uri = f"url('data:font/truetype;base64,{b64}')"
+                html_content = html_content.replace(relative_url, data_uri)
+                print(f"   ✓ Embedded font: {font_file.name}")
+            except Exception as e:
+                print(f"   ⚠️ Could not embed font {font_file.name}: {e}")
+
+        # Also embed logo as base64
+        assets_dir = self.templates_dir.parent / 'assets'
+        for img_ext in ['png', 'jpg', 'jpeg']:
+            for img_file in assets_dir.glob(f'*.{img_ext}'):
+                relative_src = f'../assets/{img_file.name}'
+                try:
+                    img_data = img_file.read_bytes()
+                    b64 = base64.b64encode(img_data).decode('ascii')
+                    mime = 'image/png' if img_ext == 'png' else 'image/jpeg'
+                    data_uri = f'data:{mime};base64,{b64}'
+                    html_content = html_content.replace(relative_src, data_uri)
+                    print(f"   ✓ Embedded image: {img_file.name}")
+                except Exception:
+                    pass
 
         return html_content
 

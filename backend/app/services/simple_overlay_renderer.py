@@ -10,6 +10,68 @@ import os
 class SimpleOverlayRenderer:
     """Create video overlays using Pillow instead of html2image."""
 
+    # Get the project's font directory
+    FONTS_DIR = Path(__file__).parent.parent.parent / 'assets' / 'fonts'
+
+    # Tamil-compatible fonts (in order of preference)
+    # First try embedded project fonts, then system fonts as fallback
+    @staticmethod
+    def _get_font_paths(bold: bool = True) -> list:
+        """Get list of font paths to try, preferring embedded fonts."""
+        fonts_dir = SimpleOverlayRenderer.FONTS_DIR
+
+        if bold:
+            return [
+                # Arial Bold for Latin text (most reliable)
+                "C:/Windows/Fonts/arialbd.ttf",
+                # Nirmala UI supports both Latin and Tamil (.ttc format)
+                "C:/Windows/Fonts/Nirmala.ttc",
+                # Arial regular as fallback
+                "C:/Windows/Fonts/arial.ttf",
+                # Tamil-only fonts (for Tamil text only)
+                str(fonts_dir / "NotoSansTamil-Bold.ttf"),
+                str(fonts_dir / "NotoSansTamil-Regular.ttf"),
+            ]
+        else:
+            return [
+                # Arial for Latin text (most reliable)
+                "C:/Windows/Fonts/arial.ttf",
+                # Nirmala UI supports both Latin and Tamil (.ttc format)
+                "C:/Windows/Fonts/Nirmala.ttc",
+                # Arial Bold as fallback
+                "C:/Windows/Fonts/arialbd.ttf",
+                # Tamil-only fonts (for Tamil text only)
+                str(fonts_dir / "NotoSansTamil-Regular.ttf"),
+                str(fonts_dir / "NotoSansTamil-Bold.ttf"),
+            ]
+
+    @staticmethod
+    def _load_font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
+        """
+        Load a Tamil-compatible font with fallback options.
+
+        Args:
+            size: Font size in pixels
+            bold: Whether to prefer bold variant
+
+        Returns:
+            ImageFont object that supports Tamil characters
+        """
+        fonts_to_try = SimpleOverlayRenderer._get_font_paths(bold)
+
+        for font_path in fonts_to_try:
+            try:
+                if os.path.exists(font_path):
+                    font = ImageFont.truetype(font_path, size)
+                    print(f"   ✓ Loaded font: {os.path.basename(font_path)}")
+                    return font
+            except Exception as e:
+                continue
+
+        # Last resort: default font
+        print(f"⚠️ Warning: No Tamil font found, using default")
+        return ImageFont.load_default()
+
     @staticmethod
     def create_overlay(
         template_name: str,
@@ -72,14 +134,11 @@ class SimpleOverlayRenderer:
             img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
 
-            # Load fonts
-            try:
-                font_headline = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 52)
-                font_date = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 36)
-                font_location = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 38)
-                font_logo = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 32)
-            except:
-                font_headline = font_date = font_location = font_logo = ImageFont.load_default()
+            # Load Tamil-compatible fonts
+            font_headline = SimpleOverlayRenderer._load_font(52, bold=True)
+            font_date = SimpleOverlayRenderer._load_font(36, bold=True)
+            font_location = SimpleOverlayRenderer._load_font(38, bold=True)
+            font_logo = SimpleOverlayRenderer._load_font(32, bold=True)
 
             # Golden gradient top bar (approximation)
             gold_color = (255, 215, 0, 230)  # Golden
@@ -143,14 +202,11 @@ class SimpleOverlayRenderer:
             img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
 
-            # Load fonts
-            try:
-                font_headline = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 48)
-                font_logo = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 48)
-                font_date = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 32)
-                font_location = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 36)
-            except:
-                font_headline = font_logo = font_date = font_location = ImageFont.load_default()
+            # Load Tamil-compatible fonts
+            font_headline = SimpleOverlayRenderer._load_font(48, bold=True)
+            font_logo = SimpleOverlayRenderer._load_font(48, bold=True)
+            font_date = SimpleOverlayRenderer._load_font(32, bold=True)
+            font_location = SimpleOverlayRenderer._load_font(36, bold=True)
 
             # Orange top bar
             orange_color = (255, 107, 53, 240)
@@ -214,13 +270,10 @@ class SimpleOverlayRenderer:
             img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
             draw = ImageDraw.Draw(img)
 
-            # Load fonts
-            try:
-                font_headline = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 50)
-                font_date = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 26)
-                font_location = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 30)
-            except:
-                font_headline = font_date = font_location = ImageFont.load_default()
+            # Load Tamil-compatible fonts
+            font_headline = SimpleOverlayRenderer._load_font(50, bold=False)
+            font_date = SimpleOverlayRenderer._load_font(26, bold=False)
+            font_location = SimpleOverlayRenderer._load_font(30, bold=False)
 
             # Top line
             draw.rectangle([0, 0, width, 6], fill=(0, 0, 0, 255))
@@ -290,13 +343,10 @@ class SimpleOverlayRenderer:
             header_color = (122, 32, 13, 255)  # #7a200d (same as border)
             header_bottom_border = (92, 26, 26, 255)  # #5c1a1a
 
-            # Load fonts
-            try:
-                font_headline = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 55)
-                font_location = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 32)
-                font_date = ImageFont.truetype("C:/Windows/Fonts/cour.ttf", 32)
-            except:
-                font_headline = font_location = font_date = ImageFont.load_default()
+            # Load Tamil-compatible fonts
+            font_headline = SimpleOverlayRenderer._load_font(55, bold=True)
+            font_location = SimpleOverlayRenderer._load_font(32, bold=True)
+            font_date = SimpleOverlayRenderer._load_font(32, bold=True)
 
             # 1. Draw border frame (sides and bottom only)
             border_width = 20
@@ -362,11 +412,8 @@ class SimpleOverlayRenderer:
                 loc_y = height - 100
                 loc_x = 40
 
-                # Load smaller font for location to prevent overflow
-                try:
-                    font_location_small = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 28)
-                except:
-                    font_location_small = ImageFont.load_default()
+                # Load smaller Tamil-compatible font for location
+                font_location_small = SimpleOverlayRenderer._load_font(28, bold=True)
 
                 # Calculate text width with smaller font
                 loc_text = f"📍 {location}"
