@@ -21,11 +21,26 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Video Headline & Template Generator API")
     print("="*50)
 
+    # Show Python info for debugging
+    import sys
+    print(f"✓ Python: {sys.executable}")
+
     # Ensure storage directories exist
     settings.ensure_directories()
-    print(f"✓ Storage directories configured")
-    print(f"  - Uploads: {settings.upload_path}")
-    print(f"  - Processed: {settings.processed_path}")
+
+    # Check S3 / local storage
+    if settings.use_s3:
+        try:
+            import boto3
+            s3 = boto3.client("s3", region_name=settings.AWS_REGION,
+                              aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                              aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY)
+            s3.head_bucket(Bucket=settings.S3_BUCKET_NAME)
+            print(f"✓ S3 storage: s3://{settings.S3_BUCKET_NAME}")
+        except Exception as e:
+            print(f"⚠️ S3 check failed: {e}")
+    else:
+        print(f"✓ Local storage: {settings.upload_path}")
 
     # Connect to MongoDB
     await Database.connect_db()

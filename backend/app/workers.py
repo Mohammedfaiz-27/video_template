@@ -52,16 +52,25 @@ async def analyze_video_task(video_id: str) -> bool:
             }
         )
 
-        # Get video path
+        # Get video path (may be s3:// or local)
         video_path = video.get("original_path")
-        if not video_path or not Path(video_path).exists():
-            raise FileNotFoundError(f"Video file not found: {video_path}")
+        if not video_path:
+            raise FileNotFoundError("No video path stored in database")
 
-        # Initialize services
-        gemini = GeminiService()
+        # Download to local temp if stored in S3
+        local_video_path = StorageService.download_to_temp(video_path)
+        temp_downloaded = local_video_path != video_path  # True if we made a temp copy
 
-        # Run complete analysis
-        transcript, visual, headline, location = await gemini.analyze_video_complete(video_path)
+        try:
+            # Initialize services
+            gemini = GeminiService()
+
+            # Run complete analysis
+            transcript, visual, headline, location = await gemini.analyze_video_complete(local_video_path)
+        finally:
+            # Clean up temp file
+            if temp_downloaded:
+                StorageService.delete_file(local_video_path)
 
         # Update database with analysis results
         await collection.update_one(
@@ -216,13 +225,17 @@ async def render_video_task(video_id: str) -> bool:
             }
         )
 
-        # Get paths
+        # Get paths (original_path may be s3:// or local)
         input_path = video.get("original_path")
-        if not input_path or not Path(input_path).exists():
-            raise FileNotFoundError(f"Original video not found: {input_path}")
+        if not input_path:
+            raise FileNotFoundError("No video path stored in database")
 
-        # Determine output path
-        output_path = str(StorageService.get_processed_path(video_id, Path(input_path).suffix))
+        # Download original from S3 to local temp for ffmpeg
+        local_input = StorageService.download_to_temp(input_path)
+        temp_input = local_input != input_path
+
+        # Local temp path for rendered output
+        output_path = str(StorageService.get_processed_path(video_id, ".mp4"))
 
         # Get headline and location
         final_headline = video.get("user_headline") or \
@@ -240,10 +253,10 @@ async def render_video_task(video_id: str) -> bool:
             print(f"   Location: {final_location}")
         print(f"   Template: {template_id}")
 
-        # Process video
+        # Process video using local temp paths
         processor = VideoProcessor()
         success = processor.process_video_complete(
-            input_path,
+            local_input,
             output_path,
             final_headline,
             final_location,
@@ -251,11 +264,21 @@ async def render_video_task(video_id: str) -> bool:
             template_id
         )
 
+        # Clean up temp input
+        if temp_input:
+            StorageService.delete_file(local_input)
+
         if not success:
             raise Exception("Video processing failed")
 
-        # Get output file size
-        file_size_mb = StorageService.get_file_size_mb(output_path)
+        # Upload processed video to S3 (or keep local)
+        final_storage_path = StorageService.upload_processed_video(output_path, video_id)
+
+        # Clean up local rendered file if it was uploaded to S3
+        if final_storage_path != output_path:
+            StorageService.delete_file(output_path)
+
+        file_size_mb = StorageService.get_file_size_mb(output_path) if final_storage_path == output_path else 0.0
 
         # Update database with completed status
         await collection.update_one(
@@ -263,14 +286,14 @@ async def render_video_task(video_id: str) -> bool:
             {
                 "$set": {
                     "status": VideoStatus.COMPLETED,
-                    "processed_path": output_path,
+                    "processed_path": final_storage_path,
                     "updated_at": datetime.utcnow()
                 }
             }
         )
 
         log_task_complete("Video Rendering", video_id, success=True)
-        print(f"📦 Output file: {Path(output_path).name} ({file_size_mb:.1f} MB)")
+        print(f"📦 Output stored: {final_storage_path}")
 
         return True
 

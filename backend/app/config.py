@@ -17,10 +17,18 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "video_generator"
 
-    # Storage
+    # Storage (local fallback — not used when S3 is configured)
     UPLOAD_DIR: str = "./storage/uploads"
     PROCESSED_DIR: str = "./storage/processed"
     MAX_FILE_SIZE: int = 524288000  # 500MB in bytes
+
+    # AWS S3
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "ap-south-1"
+    S3_BUCKET_NAME: str = ""
+    S3_UPLOAD_PREFIX: str = "uploads"
+    S3_PROCESSED_PREFIX: str = "processed"
 
     # Server
     HOST: str = "0.0.0.0"
@@ -51,10 +59,14 @@ class Settings(BaseSettings):
         """Get absolute path to processed directory."""
         return Path(self.PROCESSED_DIR).resolve()
 
+    @property
+    def use_s3(self) -> bool:
+        """True if S3 is configured."""
+        return bool(self.S3_BUCKET_NAME and self.AWS_ACCESS_KEY_ID)
+
     def ensure_directories(self):
-        """Ensure storage directories exist."""
-        self.upload_path.mkdir(parents=True, exist_ok=True)
-        self.processed_path.mkdir(parents=True, exist_ok=True)
+        """Ensure local temp directory exists (used for processing)."""
+        Path("/tmp/video_processing").mkdir(parents=True, exist_ok=True)
 
 
 # Global settings instance

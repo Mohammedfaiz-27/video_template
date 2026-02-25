@@ -396,13 +396,18 @@ async def get_video_output(video_id: str):
         )
 
     processed_path = video.get("processed_path")
-    if not processed_path or not Path(processed_path).exists():
+    if not processed_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processed video file not found"
+        )
+    if not processed_path.startswith("s3://") and not Path(processed_path).exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Processed video file not found"
         )
 
-    file_size_mb = StorageService.get_file_size_mb(processed_path)
+    file_size_mb = StorageService.get_file_size_mb(processed_path) if not processed_path.startswith("s3://") else 0.0
 
     # Determine final headline and location
     final_headline = video.get("user_headline") or \
@@ -446,16 +451,46 @@ async def download_video(video_id: str):
         )
 
     processed_path = video.get("processed_path")
-    if not processed_path or not Path(processed_path).exists():
+    if not processed_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Processed video file not found"
         )
 
-    # Return file
+    filename = f"{video_id}_processed.mp4"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+
+    # S3 storage — stream file through backend
+    if processed_path.startswith("s3://"):
+        try:
+            from app.services.storage_service import _get_s3_client
+            without_prefix = processed_path[5:]
+            bucket, key = without_prefix.split("/", 1)
+            s3 = _get_s3_client()
+            s3_obj = s3.get_object(Bucket=bucket, Key=key)
+            body = s3_obj["Body"]
+
+            def stream():
+                while chunk := body.read(8192):
+                    yield chunk
+
+            return StreamingResponse(
+                stream(),
+                media_type="video/mp4",
+                headers=headers
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to download from S3: {e}")
+
+    # Local storage — serve file directly
+    if not Path(processed_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Processed video file not found"
+        )
     return FileResponse(
         path=processed_path,
         media_type="video/mp4",
-        filename=f"{video_id}_processed.mp4",
-        headers={"Content-Disposition": f"attachment; filename={video_id}_processed.mp4"}
+        filename=filename,
+        headers=headers
     )
