@@ -16,11 +16,17 @@ from app.models.video import TranscriptData, VisualAnalysis, HeadlineData, Locat
 class GeminiService:
     """Service for interacting with Google Gemini API."""
 
+    # Models to try in order — first stable, fallback to older
+    MODEL_PRIORITY = [
+        'models/gemini-2.0-flash',
+        'models/gemini-1.5-flash',
+        'models/gemini-1.5-flash-8b',
+    ]
+
     def __init__(self):
         """Initialize Gemini service with API key."""
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        # Use latest stable Gemini 2.5 Flash (good quota, fast)
-        self.model_name = 'models/gemini-2.5-flash'
+        self.model_name = self.MODEL_PRIORITY[0]
 
     async def analyze_video_complete(
         self,
@@ -120,6 +126,36 @@ class GeminiService:
             print(f"ERROR: {type(e).__name__}: {e}")
             raise
 
+    def _generate_with_retry(self, prompt, contents=None, temperature=0.3):
+        """
+        Call Gemini with automatic model fallback on 503 / quota errors.
+        Tries each model in MODEL_PRIORITY before giving up.
+        """
+        last_error = None
+        for model in self.MODEL_PRIORITY:
+            try:
+                call_contents = contents if contents is not None else prompt
+                response = self.client.models.generate_content(
+                    model=model,
+                    contents=call_contents,
+                    config=types.GenerateContentConfig(
+                        temperature=temperature,
+                        response_mime_type="application/json"
+                    )
+                )
+                if model != self.model_name:
+                    print(f"   ⚠️ Used fallback model: {model}")
+                return response
+            except Exception as e:
+                err_str = str(e)
+                if '503' in err_str or 'UNAVAILABLE' in err_str or '429' in err_str or 'quota' in err_str.lower():
+                    print(f"   Model {model} unavailable ({e}), trying next...")
+                    last_error = e
+                    time.sleep(2)
+                    continue
+                raise  # Non-retryable error — re-raise immediately
+        raise last_error
+
     async def extract_transcript(self, video_file) -> TranscriptData:
         """
         Extract BOTH speech and visible text from video using Gemini.
@@ -132,38 +168,38 @@ class GeminiService:
         """
         try:
             prompt = """
-            Analyze this video and extract ALL text information:
-            1. Transcribe all spoken words (dialogue, narration)
-            2. Extract all visible text on screen (signs, captions, overlays, text graphics)
+            Carefully analyze this video and extract ALL available text information:
 
-            Combine both into a comprehensive transcript.
+            1. SPEECH: Transcribe every spoken word, dialogue, narration, announcements
+            2. VISIBLE TEXT: Read all on-screen text — banners, signs, lower-thirds, subtitles,
+               captions, news tickers, title cards, location names, any written text visible in the video
+            3. AUDIO CUES: Note background audio if relevant (crowd sounds, music, etc.)
+
+            Write a DETAILED, COMPLETE transcript combining all of the above.
+            Do NOT summarize — write out the actual words spoken and text seen.
+            Include as much detail as possible. Aim for at least a few sentences.
 
             Return a JSON object with this exact structure:
             {
-                "text": "Combined transcript: [spoken content] + [visible text]",
-                "language": "detected language code (e.g., 'en', 'ta', 'hi', 'es')",
+                "text": "Full detailed transcript here with all speech and visible text...",
+                "language": "detected language code (e.g., 'en', 'ta', 'hi', 'te', 'ml')",
                 "language_confidence": 0.95,
                 "has_significant_audio": true
             }
 
-            If there is no speech or text, set text to empty string.
-            Be accurate with language detection. Use 'ta' for Tamil, 'hi' for Hindi, 'en' for English.
+            Language detection: use 'ta' for Tamil, 'hi' for Hindi, 'te' for Telugu,
+            'ml' for Malayalam, 'en' for English. Detect from both audio and on-screen text.
             """
 
-            # Use new API for content generation
-            response = self.client.models.generate_content(
-                model=self.model_name,
+            response = self._generate_with_retry(
+                prompt=prompt,
                 contents=[
                     types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
-                    prompt  # Just pass the text directly
+                    prompt
                 ],
-                config=types.GenerateContentConfig(
-                    temperature=0.3,
-                    response_mime_type="application/json"
-                )
+                temperature=0.2
             )
 
-            # Parse JSON response
             response_text = response.text.strip()
 
             if not response_text:
@@ -173,9 +209,10 @@ class GeminiService:
             print(f"Transcript response: {len(response_text)} chars")
 
             result = json.loads(response_text)
+            transcript_text = result.get("text", "")
 
             return TranscriptData(
-                text=result.get("text", ""),
+                text=transcript_text,
                 language=result.get("language", "en"),
                 language_confidence=result.get("language_confidence", 0.0),
                 has_significant_audio=result.get("has_significant_audio", True)
@@ -183,7 +220,6 @@ class GeminiService:
 
         except Exception as e:
             print(f"❌ Error extracting transcript: {e}")
-            # Return empty transcript on error
             return TranscriptData(
                 text="",
                 language="unknown",
@@ -204,19 +240,19 @@ class GeminiService:
             HeadlineData with primary headline and alternatives
         """
         try:
-            if not transcript or len(transcript.strip()) < 10:
+            if not transcript or len(transcript.strip()) < 5:
                 return HeadlineData(
-                    primary="Untitled Video",
-                    alternatives=["Watch This!", "Amazing Content"],
-                    confidence=0.3,
+                    primary="செய்தி வீடியோ",
+                    alternatives=[],
+                    confidence=0.2,
                     tone="neutral"
                 )
 
             prompt = f"""
-            Based on this video transcript, generate engaging headlines for social media.
+            Based on this video transcript, generate a short and engaging news headline.
 
             Transcript:
-            {transcript[:1000]}
+            {transcript[:2000]}
 
             CRITICAL LANGUAGE INSTRUCTION:
             - Detect the language of the transcript carefully
@@ -224,51 +260,47 @@ class GeminiService:
             - If transcript is in Tamil (தமிழ்), ALL headlines MUST be in Tamil script only
             - If transcript is in Hindi (हिंदी), ALL headlines MUST be in Hindi script only
             - If transcript is in English, ALL headlines MUST be in English only
-            - Do NOT mix languages - keep everything in the detected language
-            - Preserve the native script and writing system
+            - Do NOT translate or mix languages — use only the native script
+            - Preserve the native script and writing system exactly
 
-            Create headlines that are:
-            - 5-10 words long (or equivalent in the detected language)
-            - Attention-grabbing and click-worthy
-            - Relevant to the content
-            - Suitable for Instagram, TikTok, YouTube Shorts
-            - Natural and conversational in the detected language
+            Create a news-style headline that is:
+            - 5-12 words (or equivalent in the detected language)
+            - Factual and descriptive — based strictly on what the transcript says
+            - Suitable for a news broadcast overlay
+            - Do NOT invent content not present in the transcript
 
             Return a JSON object with this exact structure:
             {{
-                "primary": "Most engaging headline in the detected language",
-                "alternatives": ["Alternative 1", "Alternative 2", "Alternative 3"],
+                "primary": "Main news headline in the detected language",
+                "alternatives": ["Alt 1 in same language", "Alt 2 in same language"],
                 "confidence": 0.85,
-                "tone": "exciting/informative/funny/emotional/inspirational"
+                "tone": "informative"
             }}
-
-            IMPORTANT: All text in primary and alternatives MUST be in the same language as the transcript.
             """
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    response_mime_type="application/json"
-                )
-            )
-
+            response = self._generate_with_retry(prompt=prompt, temperature=0.4)
             result = json.loads(response.text.strip())
 
+            primary = result.get("primary", "").strip()
+            if not primary:
+                # Use first 80 chars of transcript as last resort
+                primary = transcript.strip()[:80]
+
             return HeadlineData(
-                primary=result.get("primary", "Untitled Video"),
+                primary=primary,
                 alternatives=result.get("alternatives", []),
                 confidence=result.get("confidence", 0.5),
-                tone=result.get("tone", "neutral")
+                tone=result.get("tone", "informative")
             )
 
         except Exception as e:
             print(f"Error generating headline: {e}")
+            # Use transcript itself as fallback instead of generic text
+            fallback = transcript.strip()[:80] if transcript and transcript.strip() else "செய்தி வீடியோ"
             return HeadlineData(
-                primary="Amazing Video",
-                alternatives=["Watch This!", "You Won't Believe This"],
-                confidence=0.3,
+                primary=fallback,
+                alternatives=[],
+                confidence=0.2,
                 tone="neutral"
             )
 
@@ -322,15 +354,7 @@ class GeminiService:
             IMPORTANT: The location text MUST be in the same language as the transcript.
             """
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.3,
-                    response_mime_type="application/json"
-                )
-            )
-
+            response = self._generate_with_retry(prompt=prompt, temperature=0.3)
             result = json.loads(response.text.strip())
 
             return LocationData(
