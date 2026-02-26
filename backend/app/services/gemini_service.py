@@ -195,7 +195,7 @@ class GeminiService:
                 prompt=prompt,
                 contents=[
                     types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
-                    prompt
+                    types.Part.from_text(prompt)
                 ],
                 temperature=0.2
             )
@@ -219,7 +219,9 @@ class GeminiService:
             )
 
         except Exception as e:
-            print(f"❌ Error extracting transcript: {e}")
+            import traceback
+            print(f"❌ Error extracting transcript: {type(e).__name__}: {e}")
+            print(traceback.format_exc())
             return TranscriptData(
                 text="",
                 language="unknown",

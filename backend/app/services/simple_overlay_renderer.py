@@ -22,27 +22,37 @@ class SimpleOverlayRenderer:
     def _load_font(size: int, bold: bool = True, text: str = "") -> ImageFont.FreeTypeFont:
         """
         Load the best font for the given text (Tamil or Latin).
-        - Tamil text  → NotoSansTamil (project asset, always present)
-        - Latin text  → Arial Bold / Arial (system fonts)
-        - Fallback    → Nirmala.ttc (supports both scripts)
+        Works on both Windows and Linux (Render/Docker).
         """
         fonts_dir = SimpleOverlayRenderer.FONTS_DIR
 
         if SimpleOverlayRenderer._has_tamil(text):
-            # Tamil script: prefer NotoSansTamil, fall back to Nirmala
+            # Tamil script — use project-bundled NotoSansTamil (always present)
             candidates = [
                 str(fonts_dir / ("NotoSansTamil-Bold.ttf" if bold else "NotoSansTamil-Regular.ttf")),
                 str(fonts_dir / "NotoSansTamil-Regular.ttf"),
                 str(fonts_dir / "NotoSansTamil-Bold.ttf"),
+                # Windows fallback
                 "C:/Windows/Fonts/Nirmala.ttc",
             ]
         else:
-            # Latin / English: prefer Arial, fall back to Nirmala
+            # Latin / English
             candidates = [
+                # Windows paths
                 "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/arialbd.ttf",
                 "C:/Windows/Fonts/Nirmala.ttc",
+                # Linux paths (Debian/Ubuntu — available on Render)
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf" if bold else "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                # NotoSans as last resort (covers Latin too)
+                str(fonts_dir / "NotoSansTamil-Bold.ttf"),
+                str(fonts_dir / "NotoSansTamil-Regular.ttf"),
             ]
 
         for font_path in candidates:

@@ -28,6 +28,15 @@ async def lifespan(app: FastAPI):
     # Ensure storage directories exist
     settings.ensure_directories()
 
+    # Check available fonts
+    import os
+    linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    if os.path.exists(linux_font):
+        print(f"✓ Linux fonts available: DejaVu")
+    else:
+        print(f"⚠️ DejaVu fonts not found — installing...")
+        os.system("apt-get install -y fonts-dejavu-core 2>/dev/null || true")
+
     # Check S3 / local storage
     if settings.use_s3:
         try:
