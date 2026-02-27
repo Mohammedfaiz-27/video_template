@@ -195,7 +195,7 @@ class GeminiService:
                 prompt=prompt,
                 contents=[
                     types.Part.from_uri(file_uri=video_file.uri, mime_type=video_file.mime_type),
-                    types.Part.from_text(prompt)
+                    types.Part.from_text(text=prompt)
                 ],
                 temperature=0.2
             )
